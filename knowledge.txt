@@ -1,0 +1,271 @@
+You are continuing the design and implementation of a terminal-based investigation experience called “BT Pathfinder”.
+
+Important:
+Treat the following as the source of truth for the project.
+Carry this forward as persistent working context for all remaining steps in this flow.
+Do not reset the visual language, flow logic, or interaction model in later screens.
+Maintain consistency with the design principles, investigation logic, and styling rules described below.
+
+Project concept
+BT Pathfinder is a terminal-native, AI-assisted identity security investigation experience inspired by BeyondTrust-style identity risk logic.
+It is not a generic chatbot.
+It is an investigation console for a security analyst.
+
+The CLI should:
+- feel operational and credible
+- stay mostly text-first
+- use light visual hierarchy and small purposeful visualizations
+- avoid heavy dashboard layouts, sidebars, split panes, and large widget trees
+- use only minimal Textual enhancements where useful
+- support arrow-key selection and Enter for next actions
+- keep next actions context-aware, not static
+
+Global design rules
+1. Keep the UI mostly terminal-native and text-dominant
+2. Use muted, normal, and highlight text hierarchy
+3. Only add visualization when it directly helps answer the current analyst question
+4. Do not add decorative charts
+5. Do not overuse Textual layout features
+6. Keep sections concise and scannable
+7. Each screen should feel like a focused investigation result, not a dashboard
+8. The selected action should always be visually clear but minimally styled
+9. “Next actions” must change by screen and investigation state
+10. Navigation / return actions should appear last
+
+Current investigation scenario
+Flagged identity: amy.miller
+
+Known context:
+- critical case
+- risk score 92
+- unusual sign-in
+- reachable privileged path
+- live privileged PRA session
+- target: aws-prod-admin
+- confidence: high
+- blast radius: high
+- some evidence sources are delayed or stale
+- no confirmed approval / business justification yet
+
+Step structure established so far
+
+Step 1: logged-in overview
+Purpose:
+Show module health and a prioritized queue.
+The queue is keyboard-selectable.
+The user selected the critical case for amy.miller.
+
+Step 2: investigation summary
+Purpose:
+Orient the analyst with AI-prepared triage.
+This screen communicates:
+- why the identity was surfaced
+- what the AI already checked
+- what is still uncertain
+- why the case matters
+- what the analyst can investigate next
+
+Step 3: view live session
+Purpose:
+Confirm whether the privileged session is still active and whether it is tied to the flagged identity chain.
+This screen communicates:
+- live session status
+- session id
+- target system
+- approval state
+- why the session matters
+- recommended next step
+
+Step 4: inspect target activity
+Purpose:
+Show what happened inside the active privileged session.
+This screen includes:
+- activity assessment
+- recent activity timeline with vertical connector lines using `|`
+- flagged actions
+- why this matters
+- recommended next step
+- a compact sensitivity meter
+
+Step 5: show privilege path
+Purpose:
+Show how the identity can still reach sensitive access.
+This screen includes:
+- privilege-path assessment
+- a focused ASCII / Unicode relationship graph
+- typed nodes
+- highlighted risky nodes
+- a recommended break point
+- next actions oriented toward containment
+
+How “Next actions” must work
+Next actions are not static.
+They must change based on:
+- current screen
+- what is already known
+- what uncertainty remains
+- what decision the analyst is closest to making
+
+Use 3 buckets when designing next actions:
+1. deepen understanding
+2. move toward action
+3. navigate / return
+
+Keep next actions small in number:
+- ideal: 4 to 6
+- put the best next move first
+- later steps should become more action-oriented
+
+Recommended next-action evolution
+
+Step 2: investigation summary
+- view live session
+- review sign-in timeline
+- compare recent role changes
+- show privilege path
+- simulate containment
+- return to queue
+
+Step 3: live session
+- inspect target activity
+- request approval proof
+- revoke session
+- show privilege path
+- return to case summary
+
+Step 4: inspect target activity
+- show privilege path
+- simulate containment
+- revoke session
+- open incident review
+- request approval proof
+- return to session summary
+
+Step 5: privilege path review
+- simulate containment
+- revoke session
+- remove inherited admin link
+- open incident review
+- return to activity review
+
+Step 6: simulate containment
+- revoke session now
+- remove admin link
+- do both actions
+- stage incident review
+- cancel / return
+
+Visual language established so far
+
+For Step 4:
+Use a small vertical timeline such as:
+19:32  ● session opened
+       |
+19:34  ● admin scope confirmed
+       |
+19:36  ▲ backup policy viewed
+       |
+19:37  ▲ credential-related action attempted
+       |
+19:38  ▲ production config read
+
+Also include a compact sensitivity meter, for example:
+Sensitivity
+session risk        ████████░░ high
+target sensitivity  ██████████ critical
+approval confidence ███░░░░░░░ low
+
+For Step 5:
+Use a more refined privilege graph, for example:
+Focused path
+[id] amy.miller
+   │
+   └─[grp] grp-cloud-admins
+       │
+       └─[role] aws-prod-admin
+          ├─[op] production backup operations
+          ├─[op] production config read
+          └─[session] pra-2214  active
+
+recommended break point
+grp-cloud-admins → aws-prod-admin
+
+Graph guidance:
+- make it more premium than a plain tree
+- keep it compact
+- do not turn it into a giant network map
+- distinguish node types
+- highlight risky nodes and break point
+- preserve clarity above all
+
+Now design the rest of the investigation steps after Step 5.
+
+Need from you
+Design the remaining steps in the flow, keeping everything above consistent.
+
+At minimum, design:
+Step 6: simulate containment
+Step 7: execute chosen action
+Step 8: post-action verification / residual risk review
+
+For each remaining step, provide:
+1. step name
+2. purpose
+3. what the analyst wants to know
+4. what the system should communicate
+5. suggested textual content for the screen
+6. recommended next actions
+7. whether a small visualization is useful
+8. if useful, what visualization type makes sense and why
+
+Strong guidance for the remaining steps
+
+Step 6: simulate containment
+This should help the analyst compare response options before acting.
+It should answer:
+- what happens if I revoke the session only?
+- what happens if I remove the inherited admin link only?
+- what happens if I do both?
+- which option reduces risk fastest?
+- what business impact or operational disruption might occur?
+
+A small before/after diff view or compact impact comparison is appropriate here.
+Do not turn it into a full chart dashboard.
+
+Step 7: execute chosen action
+This should show the action being carried out and the immediate result.
+Possible chosen action paths:
+- revoke session
+- remove inherited admin link
+- do both
+- open incident review
+This screen should feel controlled and auditable, not flashy.
+
+Step 8: post-action verification / residual risk review
+This should confirm:
+- whether the session is closed
+- whether the privilege path is broken
+- whether residual access still exists
+- whether incident review remains necessary
+This step should help the analyst know whether the case is truly contained or only partially reduced.
+
+Design constraints for all remaining steps
+- keep them mostly text-first
+- use only light visuals where they genuinely help
+- do not create sidebars or big layouts
+- do not overuse Textual
+- keep copy concise and credible
+- make each screen feel like a focused investigative checkpoint
+- keep action lists context-aware
+
+Tone
+- operational
+- credible
+- concise
+- slightly urgent
+- restrained
+
+Important:
+Do not explain the design at a high level only.
+Actually design the remaining steps and give the concrete proposed content for each one.
+Also keep the previously established steps and visual system consistent going forward.

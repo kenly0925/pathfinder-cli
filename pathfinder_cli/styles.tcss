@@ -1,0 +1,122 @@
+$bg-deep: #26211F;
+$bg-panel: #26211F;
+$bg-soft: #403632;
+$bg-input: #473C38;
+$text-main: #F0E5DB;
+$text-muted: #C9B8AA;
+$line: #7D6C65;
+$orange-primary: #FF6A00;
+$orange-soft: #F09A3E;
+$orange-pale: #FFB36B;
+$ok: #00FF73;
+
+Screen {
+    background: $bg-deep;
+    color: $text-main;
+}
+
+#root {
+    height: 1fr;
+    width: 1fr;
+    background: $bg-panel;
+}
+
+#top-spacer {
+    height: 1;
+    background: $bg-panel;
+}
+
+#top-bar {
+    height: 1;
+    padding: 0 2;
+    background: $bg-panel;
+}
+
+#top-title {
+    width: 1fr;
+    color: $orange-primary;
+}
+
+#top-meta {
+    width: auto;
+    color: $text-main;
+    text-align: right;
+}
+
+.section-divider {
+    height: 1;
+    border-top: solid $line;
+    background: $bg-panel;
+}
+
+#main-log {
+    height: 1fr;
+    padding: 1 2;
+    border: none;
+    background: $bg-panel;
+    color: $text-main;
+    scrollbar-size: 0 0;
+}
+
+#main-log:focus {
+    background: $bg-panel;
+}
+
+#command-bar {
+    height: auto;
+    padding: 0 0 1 0;
+    background: $bg-panel;
+    border-top: solid $line;
+}
+
+#typing-indicator {
+    height: 1;
+    padding: 1 2 0 2;
+    color: $text-main;
+    background: $bg-panel;
+}
+
+#command-input {
+    margin-top: 0;
+    padding: 0 2;
+    background: $bg-panel;
+    color: $text-main;
+    border: none;
+}
+
+#command-input:focus {
+    background: $bg-panel;
+    color: $text-main;
+}
+
+Input > .input--placeholder {
+    color: $text-muted;
+}
+
+Input > .input--cursor {
+    background: $orange-primary;
+    color: $bg-panel;
+}
+
+.command-divider {
+    height: 1;
+    border-top: solid $line;
+    background: $bg-panel;
+}
+
+#footer-row {
+    height: 1;
+    padding: 0 2;
+    background: $bg-panel;
+}
+
+#command-hint {
+    width: 1fr;
+    color: $text-muted;
+}
+
+#session-status {
+    width: auto;
+    color: $text-main;
+    text-align: right;
+}
