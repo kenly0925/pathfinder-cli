@@ -227,6 +227,44 @@ class ConversationEntry:
     created_at: time.struct_time = field(default_factory=time.localtime)
 
 
+@dataclass
+class StoryContext:
+    entity: str = "svc-backup-ops"
+    environment: str | None = None
+    time_range: str | None = None
+    goal: str | None = None
+    working_hypothesis: str = (
+        "Suspicious privileged service-account activity overlaps an active production session and a reachable admin path."
+    )
+    active_session: str = "pra-2214"
+    reachable_path: str = "grp-cloud-admins -> aws-prod-admin"
+    risk_score: int = 91
+    memory_active: bool = False
+    role_label: str = "SOC Analyst II"
+    current_scene: str = "story_ambiguity"
+    prepared_approval_keys: tuple[str, ...] = ()
+    incident_ticket: str | None = None
+    approval_proof_requested: bool = False
+    incident_review_staged: bool = False
+    export_ready: bool = False
+    top_asset: str = "prod-sql-07"
+    selected_scope_label: str = "production | last 24 hours | triage + containment recommendation"
+
+
+@dataclass(frozen=True)
+class StoryModeReturnState:
+    module_picker_active: bool
+    home_navigation_active: bool
+    investigation_navigation_active: bool
+    investigation_case_key: str | None
+    investigation_action_index: int
+    detail_navigation_active: bool
+    detail_view_key: str | None
+    detail_action_index: int
+    detail_return_view_key: str | None
+    verification_profile_key: str | None
+
+
 MODULES: Final[tuple[ModuleSpec, ...]] = (
     ModuleSpec(
         key="pathfinder",
@@ -419,35 +457,35 @@ OVERVIEW_ROWS: Final[tuple[OverviewRow, ...]] = (
 ATTENTION_ITEMS: Final[tuple[AttentionItem, ...]] = (
     AttentionItem(
         "critical",
-        "amy.miller",
-        "risk 92 | unusual sign-in | reachable privileged path",
+        "svc-backup-ops",
+        "risk 91 | unusual privileged activity | active session overlap",
         "risk",
-        "isi",
-        "Validate the unusual sign-in, inspect the privilege path that stays reachable, and remove or expire access if the session is not expected.",
-    ),
-    AttentionItem(
-        "warning",
-        "entra id feed",
-        "delayed 11m | recent role changes may be missing",
-        "warn",
         "pathfinder",
-        "Confirm the Entra ID feed catches up before analysts rely on role-based exposure decisions and refresh the connector if lag continues.",
+        "Start the AI-native investigation flow to scope production activity, compare approval evidence, and prepare a reviewer-facing response without executing the privileged change.",
     ),
     AttentionItem(
         "warning",
-        "privileged session",
-        "1 flagged session still open | verification pending",
+        "pra-2214",
+        "approval evidence missing | review now",
         "warn",
         "pra",
-        "Review the flagged live session, confirm the operator is still authorized, and terminate or attest the session before it rolls into the next activity window.",
+        "Review the active privileged session metadata, compare it against the current approval trail, and decide whether a reviewer-facing revoke request should be prepared.",
+    ),
+    AttentionItem(
+        "warning",
+        "entitle request drift",
+        "JIT approval mismatch | production scope",
+        "warn",
+        "entitle",
+        "Compare the live production access path with the latest JIT approval artifact and stage a hold or escalation packet if the workflow no longer lines up cleanly.",
     ),
     AttentionItem(
         "medium",
-        "svc-backup-old",
-        "dormant privileged account | disposition overdue",
+        "linux-backup-policy",
+        "elevation path changed | validate",
         "medium",
-        "password_safe",
-        "Decide whether the dormant service account should be rotated, disabled, or retired, and capture the disposition before the next access review.",
+        "epm",
+        "Validate whether the recent Linux elevation path change is expected, then confirm it does not widen the current backup-adjacent production path.",
     ),
 )
 
@@ -1082,6 +1120,420 @@ COMMAND_HELP: Final[tuple[tuple[str, str], ...]] = (
     ("/clear", "Clear conversation history across all apps."),
     ("/reset", "Clear conversation history for the current app."),
 )
+STORY_ENTRY_PROMPT: Final[str] = "/investigate suspicious lateral movement tied to a service account"
+STORY_CONTEXT_KEY: Final[str] = "svc-backup-ops-story"
+STORY_ROLE_CAPABILITIES: Final[tuple[str, ...]] = (
+    "review detections",
+    "inspect identity context",
+    "inspect endpoint context",
+    "inspect privileged session metadata",
+    "compare approval state",
+    "create tickets and prepare requests",
+)
+STORY_ROLE_RESTRICTIONS: Final[tuple[str, ...]] = (
+    "full session contents",
+    "stored credential details",
+    "restricted secrets",
+    "sensitive identity notes",
+    "final session termination",
+    "direct path suspension",
+)
+STORY_AMBIGUITY_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_scope_default_recommend",
+        label="set production / 24h / triage + containment",
+        summary="resolve the missing scope with the recommended preset",
+        result="Scope resolved. Production, last 24 hours, triage plus containment recommendation.",
+    ),
+    InvestigationAction(
+        key="story_scope_default_triage",
+        label="set production / 24h / triage only",
+        summary="resolve the missing scope without containment guidance",
+        result="Scope resolved. Production, last 24 hours, triage only.",
+    ),
+    InvestigationAction(
+        key="story_customize_scope",
+        label="customize scope",
+        summary="enter a custom environment, time range, or goal",
+        result="Scope customization opened.",
+    ),
+    InvestigationAction(
+        key="story_show_role_limits",
+        label="show role limits",
+        summary="review what this operator can inspect versus what stays blocked",
+        result="Role limits loaded for the current operator.",
+    ),
+    InvestigationAction(
+        key="story_return_home",
+        label="return",
+        summary="leave the story entry and go back to the home view",
+        result="Returned to the home view.",
+    ),
+)
+STORY_SCOPE_CONFIRM_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_run_investigation",
+        label="run investigation",
+        summary="query the selected identity, session, approval, and entitlement signals",
+        result="Investigation started for svc-backup-ops.",
+    ),
+    InvestigationAction(
+        key="story_adjust_scope",
+        label="adjust scope",
+        summary="change the environment, time range, or goal before running",
+        result="Returned to scope collection.",
+    ),
+    InvestigationAction(
+        key="story_show_memory_state",
+        label="show memory state",
+        summary="review the session-scoped investigation memory now in use",
+        result="Session memory state loaded.",
+    ),
+    InvestigationAction(
+        key="story_return_to_ambiguity",
+        label="return",
+        summary="return to the ambiguity handling screen",
+        result="Returned to ambiguity handling.",
+    ),
+)
+STORY_SCOPE_CUSTOM_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_scope_default_recommend",
+        label="set production / 24h / triage + containment",
+        summary="apply the recommended production scope without typing a custom variant",
+        result="Scope resolved. Production, last 24 hours, triage plus containment recommendation.",
+    ),
+    InvestigationAction(
+        key="story_show_role_limits",
+        label="show role limits",
+        summary="review what the current analyst can and cannot do",
+        result="Role limits loaded for the current operator.",
+    ),
+    InvestigationAction(
+        key="story_return_to_ambiguity",
+        label="return",
+        summary="return to the ambiguity handling screen",
+        result="Returned to ambiguity handling.",
+    ),
+)
+STORY_ROLE_LIMITS_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_return_to_ambiguity",
+        label="return",
+        summary="return to the ambiguity handling screen",
+        result="Returned to ambiguity handling.",
+    ),
+)
+STORY_MEMORY_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_return_to_scope",
+        label="return",
+        summary="return to the scope confirmation view",
+        result="Returned to scope confirmation.",
+    ),
+)
+STORY_FINDINGS_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_assess_session_relatedness",
+        label="assess session relatedness",
+        summary="measure whether the active PRA session is likely tied to the same service-account activity",
+        result="Session relatedness analysis opened with explicit confidence and evidence gaps.",
+    ),
+    InvestigationAction(
+        key="story_show_privilege_path",
+        label="show privilege path",
+        summary="open the focused service-account path into production admin",
+        result="Privilege path loaded for svc-backup-ops.",
+    ),
+    InvestigationAction(
+        key="story_show_approval_evidence",
+        label="show approval evidence",
+        summary="compare PRA, Password Safe, and Entitle evidence for the current access",
+        result="Approval evidence comparison opened.",
+    ),
+    InvestigationAction(
+        key="story_list_affected_assets",
+        label="list affected assets",
+        summary="group the affected production assets by severity and overlap",
+        result="Affected assets grouped by severity.",
+    ),
+    InvestigationAction(
+        key="story_open_incident_review",
+        label="open incident review draft",
+        summary="prepare an incident review draft without executing any privileged change",
+        result="Incident review draft opened.",
+    ),
+    InvestigationAction(
+        key="story_return_to_scope",
+        label="return",
+        summary="return to the planner preview and scoped context",
+        result="Returned to scope confirmation.",
+    ),
+)
+STORY_SESSION_RELATEDNESS_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_list_affected_assets",
+        label="show affected assets",
+        summary="group assets touched by path overlap and session overlap",
+        result="Affected assets grouped by severity.",
+    ),
+    InvestigationAction(
+        key="story_show_approval_evidence",
+        label="show approval evidence",
+        summary="compare the approval trail against the live session and path",
+        result="Approval evidence comparison opened.",
+    ),
+    InvestigationAction(
+        key="story_compare_access_change_options",
+        label="show path break options",
+        summary="compare the BeyondTrust-native containment moves available",
+        result="Containment options loaded.",
+    ),
+    InvestigationAction(
+        key="story_request_approval_proof",
+        label="request approval proof",
+        summary="prepare a request for missing approval evidence without revealing blocked data",
+        result="Approval proof request prepared and the evidence screen was refreshed.",
+    ),
+    InvestigationAction(
+        key="story_return_to_findings",
+        label="return",
+        summary="return to the findings summary",
+        result="Returned to findings summary.",
+    ),
+)
+STORY_APPROVAL_EVIDENCE_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_compare_access_change_options",
+        label="show path break options",
+        summary="move from evidence review to containment comparison",
+        result="Containment options loaded.",
+    ),
+    InvestigationAction(
+        key="story_open_incident_review",
+        label="open incident review draft",
+        summary="prepare an incident review draft from the current evidence set",
+        result="Incident review draft opened.",
+    ),
+    InvestigationAction(
+        key="story_return_to_findings",
+        label="return",
+        summary="return to the findings summary",
+        result="Returned to findings summary.",
+    ),
+)
+STORY_PRIVILEGE_PATH_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_compare_access_change_options",
+        label="show path break options",
+        summary="compare the safest immediate containment options around the live path",
+        result="Containment options loaded.",
+    ),
+    InvestigationAction(
+        key="story_show_approval_evidence",
+        label="show approval evidence",
+        summary="compare the path with the current approval state and access artifacts",
+        result="Approval evidence comparison opened.",
+    ),
+    InvestigationAction(
+        key="story_list_affected_assets",
+        label="list affected assets",
+        summary="show which assets sit on the current privileged path",
+        result="Affected assets grouped by severity.",
+    ),
+    InvestigationAction(
+        key="story_return_to_findings",
+        label="return",
+        summary="return to the findings summary",
+        result="Returned to findings summary.",
+    ),
+)
+STORY_ASSETS_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_show_top_asset_detail",
+        label="show top asset detail",
+        summary="inspect the highest-priority asset with the current session context applied",
+        result="Top asset detail opened.",
+    ),
+    InvestigationAction(
+        key="story_compare_access_change_options",
+        label="show path break options",
+        summary="compare access change options against the current asset grouping",
+        result="Containment options loaded.",
+    ),
+    InvestigationAction(
+        key="story_compare_access_change_options",
+        label="compare access change options",
+        summary="review the safest immediate containment path across the affected assets",
+        result="Containment options loaded.",
+    ),
+    InvestigationAction(
+        key="story_open_incident_review",
+        label="open incident review draft",
+        summary="prepare an incident review draft from the grouped asset evidence",
+        result="Incident review draft opened.",
+    ),
+    InvestigationAction(
+        key="story_return_to_findings",
+        label="return",
+        summary="return to the findings summary",
+        result="Returned to findings summary.",
+    ),
+)
+STORY_ASSET_DETAIL_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_compare_access_change_options",
+        label="show path break options",
+        summary="compare the safest immediate containment moves for the top asset",
+        result="Containment options loaded.",
+    ),
+    InvestigationAction(
+        key="story_open_incident_review",
+        label="open incident review draft",
+        summary="prepare an incident review draft centered on the top asset",
+        result="Incident review draft opened.",
+    ),
+    InvestigationAction(
+        key="story_return_to_assets",
+        label="return",
+        summary="return to the affected asset grouping",
+        result="Returned to the grouped asset view.",
+    ),
+)
+STORY_CONTAINMENT_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_prepare_session_revoke_request",
+        label="prepare session revoke request",
+        summary="stage a reviewer-facing request to terminate the active PRA session",
+        result="Prepared a reviewer-facing session revoke request.",
+    ),
+    InvestigationAction(
+        key="story_prepare_path_suspension_request",
+        label="prepare path suspension request",
+        summary="stage a reviewer-facing request to suspend the reachable admin path",
+        result="Prepared a reviewer-facing path suspension request.",
+    ),
+    InvestigationAction(
+        key="story_prepare_combined_response_packet",
+        label="prepare combined response packet",
+        summary="stage both privileged actions and package the evidence for approval",
+        result="Prepared a combined response packet for approval.",
+    ),
+    InvestigationAction(
+        key="story_stage_incident_review",
+        label="stage incident review",
+        summary="prepare the incident review artifacts without executing a privileged action",
+        result="Incident review staged.",
+    ),
+    InvestigationAction(
+        key="story_return_to_findings",
+        label="return",
+        summary="return to the findings summary",
+        result="Returned to findings summary.",
+    ),
+)
+STORY_INCIDENT_REVIEW_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_open_approval_queue",
+        label="open approval queue",
+        summary="move from the incident draft to the approval queue view",
+        result="Approval queue opened.",
+    ),
+    InvestigationAction(
+        key="story_show_memory_state",
+        label="show memory state",
+        summary="review the active story memory feeding the incident draft",
+        result="Session memory state loaded.",
+    ),
+    InvestigationAction(
+        key="story_return_to_findings",
+        label="return",
+        summary="return to the findings summary",
+        result="Returned to findings summary.",
+    ),
+)
+STORY_HANDOFF_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_open_approval_queue",
+        label="open approval queue",
+        summary="review the staged privileged requests in the approval queue",
+        result="Approval queue opened.",
+    ),
+    InvestigationAction(
+        key="story_open_incident_review",
+        label="open incident review",
+        summary="open the draft incident review attached to the prepared packet",
+        result="Incident review draft opened.",
+    ),
+    InvestigationAction(
+        key="story_export_summary",
+        label="export summary",
+        summary="prepare a concise evidence summary for handoff and approval",
+        result="Investigation summary export prepared.",
+    ),
+    InvestigationAction(
+        key="story_show_memory_state",
+        label="show memory state",
+        summary="review the session memory still held for the live story",
+        result="Session memory state loaded.",
+    ),
+    InvestigationAction(
+        key="story_return_home_keep_memory",
+        label="return home",
+        summary="leave the handoff view but keep the active story in session memory",
+        result="Returned home with the active investigation still in memory.",
+    ),
+)
+STORY_APPROVAL_QUEUE_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_review_prepared_request",
+        label="review request",
+        summary="open the first staged reviewer-facing request in detail view",
+        result="Prepared request opened for detailed review.",
+    ),
+    InvestigationAction(
+        key="story_hold_prepared_request",
+        label="hold request",
+        summary="place the first staged request on hold pending more reviewer context",
+        result="Prepared request moved to hold.",
+    ),
+    InvestigationAction(
+        key="story_return_home_keep_memory",
+        label="return home",
+        summary="return to the home dashboard while keeping the current story in memory",
+        result="Returned home with the active investigation still in memory.",
+    ),
+)
+STORY_EXPORT_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_open_approval_queue",
+        label="open approval queue",
+        summary="review the staged requests after exporting the summary",
+        result="Approval queue opened.",
+    ),
+    InvestigationAction(
+        key="story_return_home_keep_memory",
+        label="return home",
+        summary="return to the dashboard while preserving the current story memory",
+        result="Returned home with the active investigation still in memory.",
+    ),
+)
+STORY_MENU_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction("story_mode_probabilistic", "Probabilistic UX thinking", "Open the probabilistic UX design lens", "Probabilistic UX thinking opened."),
+    InvestigationAction("story_mode_behavior", "Behavior spec", "Open the behavior specification lens", "Behavior spec opened."),
+    InvestigationAction("story_mode_memory", "Memory design", "Open the memory design lens", "Memory design opened."),
+    InvestigationAction("story_mode_boundary", "Boundary and control", "Open the boundary and control lens", "Boundary and control opened."),
+    InvestigationAction("story_mode_structure", "Full AI-native structure", "Open the full AI-native structure map", "Full AI-native structure opened."),
+    InvestigationAction("story_mode_summary", "Demo story summary", "Open the demo story summary poster", "Demo story summary opened."),
+)
+STORY_MENU_RETURN_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_mode_return",
+        label="return to story menu",
+        summary="go back to the hidden story presentation menu",
+        result="Returned to story menu.",
+    ),
+)
 ACTIONABLE_ITEMS_TOKENS: Final[frozenset[str]] = frozenset({"actionable", "item", "items"})
 INVESTIGATION_CASES: Final[dict[str, InvestigationCase]] = {
     "amy.miller": InvestigationCase(
@@ -1307,6 +1759,7 @@ class PathfinderPrototypeApp(App[None]):
         self.authenticated_user = authenticated_user or "developer"
         self.user_role = "SOC Analyst II"
         self.agent_status_rows = list(AGENT_STATUS_ROWS)
+        self.pending_approvals = list(PENDING_APPROVALS)
         self.module_index = 0
         self.module_picker_active = False
         self.module_picker_index = 0
@@ -1332,6 +1785,13 @@ class PathfinderPrototypeApp(App[None]):
         self.pending_approval_state_by_key: dict[str, str] = {
             approval.key: "waiting" for approval in PENDING_APPROVALS
         }
+        self.story_context_by_module: dict[str, StoryContext | None] = {
+            module.key: None for module in MODULES
+        }
+        self.story_mode_return_state_by_module: dict[str, StoryModeReturnState | None] = {
+            module.key: None for module in MODULES
+        }
+        self.story_context: StoryContext | None = None
         self.processing = False
         self.processing_message = ""
         self.chrome_tick = 0
@@ -1366,6 +1826,22 @@ class PathfinderPrototypeApp(App[None]):
         self.query_one("#command-input", Input).focus()
 
     def on_key(self, event: events.Key) -> None:
+        if self._story_mode_active() and event.key in {"escape", "q"}:
+            event.prevent_default()
+            event.stop()
+            current_module = self._active_module()
+            if self.detail_view_key == "story_menu":
+                self._close_story_mode(current_module.key)
+            else:
+                self.detail_navigation_active = True
+                self.detail_view_key = "story_menu"
+                self.detail_action_index = 0
+                self.detail_return_view_key = None
+                self._remember_detail_state(current_module.key)
+            self._mark_updated()
+            self._render_current_module()
+            return
+
         if event.key != "enter" or self.processing:
             return
 
@@ -1400,6 +1876,23 @@ class PathfinderPrototypeApp(App[None]):
         self.processing_message = ""
 
         try:
+            if self._story_prompt_matches_entry(prompt):
+                active_module = self._active_module()
+                self.processing_message = "Checking investigation scope..."
+                self._append_history(
+                    active_module.key,
+                    ConversationEntry(role="user", text=prompt, source_prompt=prompt),
+                )
+                self._mark_updated()
+                self._render_current_module()
+                await self._animate_processing()
+                self._start_story_from_prompt(active_module.key, prompt)
+                self.processing = False
+                self.processing_message = ""
+                self._mark_updated()
+                self._render_current_module()
+                return
+
             if prompt.startswith("/"):
                 self._handle_utility_command(prompt)
                 self.processing = False
@@ -1418,6 +1911,13 @@ class PathfinderPrototypeApp(App[None]):
             self._mark_updated()
             self._render_current_module()
             await self._animate_processing()
+
+            if self._handle_story_followup_prompt(active_module.key, prompt):
+                self.processing = False
+                self.processing_message = ""
+                self._mark_updated()
+                self._render_current_module()
+                return
 
             if self._matches_actionable_items_request(prompt):
                 self.home_navigation_active = True
@@ -1460,6 +1960,451 @@ class PathfinderPrototypeApp(App[None]):
             command_input.disabled = False
             command_input.focus()
             self._refresh_chrome()
+
+    def _start_story_from_prompt(self, module_key: str, prompt: str) -> None:
+        self.module_picker_active = False
+        self.home_navigation_active = False
+        self.investigation_navigation_active = False
+        self.investigation_case_key = None
+        self.investigation_action_index = 0
+
+        context = self._default_story_context()
+        self._set_story_context(module_key, context)
+        self._open_story_scene(
+            module_key,
+            "story_ambiguity",
+            "Investigation request received. Scope is still missing, so Pathfinder is holding the task at the context check step.",
+            source_prompt=prompt,
+        )
+
+    def _handle_story_followup_prompt(self, module_key: str, prompt: str) -> bool:
+        if not self._story_context_active():
+            return False
+
+        prompt_lower = " ".join(prompt.strip().lower().split())
+        context = self.story_context
+        if context is None:
+            return False
+
+        if "production" in prompt_lower and "24" in prompt_lower and ("containment" in prompt_lower or "triage only" in prompt_lower):
+            goal = "triage only" if "triage only" in prompt_lower else "triage + containment recommendation"
+            self._apply_story_scope(
+                module_key,
+                environment="production",
+                time_range="last 24 hours",
+                goal=goal,
+                source_prompt=prompt,
+            )
+            return True
+
+        if "run investigation" in prompt_lower and context.environment is not None:
+            self._open_story_findings(module_key, source_prompt=prompt)
+            return True
+
+        if "memory state" in prompt_lower:
+            self._open_story_scene(
+                module_key,
+                "story_memory_state",
+                "Session-scoped investigation memory loaded for the active service-account case.",
+                source_prompt=prompt,
+            )
+            return True
+
+        if "likely related" in prompt_lower or "privileged session" in prompt_lower and "related" in prompt_lower:
+            self._open_story_scene(
+                module_key,
+                "story_session_relatedness",
+                "Pathfinder assessed whether pra-2214 is likely tied to the same service-account activity.",
+                source_prompt=prompt,
+            )
+            return True
+
+        if "affected assets" in prompt_lower and "severity" in prompt_lower:
+            self._open_story_scene(
+                module_key,
+                "story_assets",
+                "Using the active investigation context, Pathfinder grouped the affected assets by severity.",
+                source_prompt=prompt,
+            )
+            return True
+
+        if "approval evidence" in prompt_lower or "approval proof" in prompt_lower:
+            self._open_story_scene(
+                module_key,
+                "story_approval_evidence",
+                "Pathfinder compared the current approval artifacts against the live session and privileged path.",
+                source_prompt=prompt,
+            )
+            return True
+
+        if "privilege path" in prompt_lower or ("path" in prompt_lower and "admin" in prompt_lower):
+            self._open_story_scene(
+                module_key,
+                "story_privilege_path",
+                "Pathfinder opened the focused privilege path tied to the active investigation.",
+                source_prompt=prompt,
+            )
+            return True
+
+        if "incident review" in prompt_lower:
+            self._open_story_scene(
+                module_key,
+                "story_incident_review",
+                "Incident review draft opened for the active investigation.",
+                source_prompt=prompt,
+            )
+            return True
+
+        if "safest immediate containment move" in prompt_lower or "containment move" in prompt_lower:
+            self._open_story_scene(
+                module_key,
+                "story_containment",
+                "Pathfinder compared the safest immediate BeyondTrust-native containment moves.",
+                source_prompt=prompt,
+            )
+            return True
+
+        return False
+
+    def _apply_story_scope(
+        self,
+        module_key: str,
+        *,
+        environment: str,
+        time_range: str,
+        goal: str,
+        source_prompt: str,
+    ) -> None:
+        context = self.story_context or self._default_story_context()
+        context.environment = environment
+        context.time_range = time_range
+        context.goal = goal
+        context.memory_active = True
+        context.current_scene = "story_scope_confirm"
+        context.selected_scope_label = f"{environment} | {time_range} | {goal}"
+        self._set_story_context(module_key, context)
+        self._open_story_scene(
+            module_key,
+            "story_scope_confirm",
+            f"Scope confirmed for {context.entity}: {environment}, {time_range}, {goal}.",
+            source_prompt=source_prompt,
+        )
+
+    def _open_story_findings(self, module_key: str, *, source_prompt: str) -> None:
+        context = self.story_context or self._default_story_context()
+        context.current_scene = "story_findings"
+        self._set_story_context(module_key, context)
+        self._open_story_scene(
+            module_key,
+            "story_findings",
+            "Initial findings loaded. Pathfinder correlated identity, session, and approval signals for svc-backup-ops.",
+            source_prompt=source_prompt,
+        )
+
+    def _open_story_scene(
+        self,
+        module_key: str,
+        scene_key: str,
+        text: str,
+        *,
+        source_prompt: str = "",
+        return_view_key: str | None = None,
+    ) -> None:
+        context = self.story_context or self._default_story_context()
+        context.current_scene = scene_key
+        self._set_story_context(module_key, context)
+        self.detail_navigation_active = True
+        self.detail_view_key = scene_key
+        self.detail_action_index = 0
+        self.detail_return_view_key = return_view_key
+        self._remember_detail_state(module_key)
+        self._append_history(
+            module_key,
+            ConversationEntry(
+                role="assistant",
+                text=text,
+                source_prompt=source_prompt,
+                kind="story_scene",
+                context_key=STORY_CONTEXT_KEY,
+                action_key=scene_key,
+            ),
+        )
+
+    def _append_story_message(self, module_key: str, text: str, *, source_prompt: str = "", action_key: str = "") -> None:
+        self._append_history(
+            module_key,
+            ConversationEntry(
+                role="assistant",
+                text=text,
+                source_prompt=source_prompt,
+                action_key=action_key,
+            ),
+        )
+
+    def _stage_story_requests(
+        self,
+        module_key: str,
+        *,
+        include_session: bool,
+        include_path: bool,
+        open_scene: str,
+        source_prompt: str,
+    ) -> None:
+        context = self.story_context or self._default_story_context()
+        ticket = self._ensure_story_incident_ticket(context)
+        prepared_keys = self._prepared_story_approval_keys(include_session=include_session, include_path=include_path)
+
+        if include_session:
+            self._stage_story_pending_approval(
+                PendingApproval(
+                    key="story-pra-2214-terminate",
+                    source="PRA",
+                    request=f"terminate {context.active_session}",
+                    requester="svc-backup-ops response",
+                    resource=context.active_session,
+                    waiting="new",
+                    ticket=ticket,
+                    duration="immediate",
+                    scope="terminate the live privileged session",
+                    approver="privileged-access-reviewer",
+                    business_case=f"correlated privileged activity tied to {context.entity}",
+                    note="prepared by Pathfinder; reviewer approval required before execution",
+                    tone="risk",
+                )
+            )
+        if include_path:
+            self._stage_story_pending_approval(
+                PendingApproval(
+                    key="story-aws-prod-admin-suspend",
+                    source="Entitle",
+                    request="suspend aws-prod-admin access",
+                    requester="svc-backup-ops response",
+                    resource="aws-prod-admin",
+                    waiting="new",
+                    ticket=ticket,
+                    duration="until reviewed",
+                    scope=context.reachable_path,
+                    approver="cloud-identity-reviewer",
+                    business_case=f"break the reachable production admin path tied to {context.entity}",
+                    note="prepared by Pathfinder; reviewer approval required before execution",
+                    tone="risk",
+                )
+            )
+
+        context.prepared_approval_keys = prepared_keys
+        context.incident_review_staged = True
+        self._set_story_context(module_key, context)
+        self._open_story_scene(module_key, open_scene, source_prompt, source_prompt=source_prompt)
+
+    def _handle_story_detail_action(self, module_key: str, action: InvestigationAction) -> bool:
+        current_scene = self.detail_view_key or "story_ambiguity"
+        context = self.story_context or self._default_story_context()
+
+        if self._story_mode_active():
+            if action.key == "story_mode_return":
+                if self.detail_view_key == "story_menu":
+                    self._close_story_mode(module_key)
+                else:
+                    self.detail_navigation_active = True
+                    self.detail_view_key = "story_menu"
+                    self.detail_action_index = 0
+                    self.detail_return_view_key = None
+                    self._remember_detail_state(module_key)
+                return True
+            if action.key.startswith("story_mode_"):
+                self.detail_navigation_active = True
+                self.detail_view_key = action.key
+                self.detail_action_index = 0
+                self.detail_return_view_key = "story_menu"
+                self._remember_detail_state(module_key)
+                return True
+            return False
+
+        if action.key == "story_scope_default_recommend":
+            self._apply_story_scope(
+                module_key,
+                environment="production",
+                time_range="last 24 hours",
+                goal="triage + containment recommendation",
+                source_prompt=action.label,
+            )
+            return True
+
+        if action.key == "story_scope_default_triage":
+            self._apply_story_scope(
+                module_key,
+                environment="production",
+                time_range="last 24 hours",
+                goal="triage only",
+                source_prompt=action.label,
+            )
+            return True
+
+        if action.key == "story_customize_scope":
+            self._open_story_scene(module_key, "story_scope_custom", action.result, source_prompt=action.label, return_view_key=current_scene)
+            return True
+
+        if action.key == "story_show_role_limits":
+            self._open_story_scene(module_key, "story_role_limits", action.result, source_prompt=action.label, return_view_key=current_scene)
+            return True
+
+        if action.key == "story_return_home":
+            self._clear_detail_state(module_key)
+            self._clear_story_context(module_key)
+            self._append_story_message(module_key, action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_run_investigation":
+            self._open_story_findings(module_key, source_prompt=action.label)
+            return True
+
+        if action.key == "story_adjust_scope":
+            self._open_story_scene(module_key, "story_scope_custom", "Scope adjustment opened.", source_prompt=action.label, return_view_key="story_scope_confirm")
+            return True
+
+        if action.key == "story_show_memory_state":
+            self._open_story_scene(module_key, "story_memory_state", action.result, source_prompt=action.label, return_view_key=current_scene)
+            return True
+
+        if action.key == "story_return_to_ambiguity":
+            self._open_story_scene(module_key, "story_ambiguity", self._story_scene_result_text("story_ambiguity", returned=True), source_prompt=action.label)
+            return True
+
+        if action.key == "story_return_to_scope":
+            target_scene = self.detail_return_view_key or "story_scope_confirm"
+            self._open_story_scene(module_key, target_scene, self._story_scene_result_text(target_scene, returned=True), source_prompt=action.label)
+            return True
+
+        if action.key == "story_assess_session_relatedness":
+            self._open_story_scene(module_key, "story_session_relatedness", action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_show_privilege_path":
+            self._open_story_scene(module_key, "story_privilege_path", action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_show_approval_evidence":
+            self._open_story_scene(module_key, "story_approval_evidence", action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_list_affected_assets":
+            self._open_story_scene(module_key, "story_assets", action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_open_incident_review":
+            self._ensure_story_incident_ticket(context)
+            context.incident_review_staged = True
+            self._set_story_context(module_key, context)
+            self._open_story_scene(module_key, "story_incident_review", action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_return_to_findings":
+            self._open_story_scene(module_key, "story_findings", self._story_scene_result_text("story_findings", returned=True), source_prompt=action.label)
+            return True
+
+        if action.key == "story_compare_access_change_options":
+            self._open_story_scene(module_key, "story_containment", action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_request_approval_proof":
+            context.approval_proof_requested = True
+            self._set_story_context(module_key, context)
+            self._open_story_scene(module_key, "story_approval_evidence", action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_show_top_asset_detail":
+            self._open_story_scene(module_key, "story_asset_detail", action.result, source_prompt=action.label, return_view_key="story_assets")
+            return True
+
+        if action.key == "story_return_to_assets":
+            self._open_story_scene(module_key, "story_assets", self._story_scene_result_text("story_assets", returned=True), source_prompt=action.label)
+            return True
+
+        if action.key == "story_prepare_session_revoke_request":
+            self._stage_story_requests(
+                module_key,
+                include_session=True,
+                include_path=False,
+                open_scene="story_handoff",
+                source_prompt=action.result,
+            )
+            return True
+
+        if action.key == "story_prepare_path_suspension_request":
+            self._stage_story_requests(
+                module_key,
+                include_session=False,
+                include_path=True,
+                open_scene="story_handoff",
+                source_prompt=action.result,
+            )
+            return True
+
+        if action.key == "story_prepare_combined_response_packet":
+            self._stage_story_requests(
+                module_key,
+                include_session=True,
+                include_path=True,
+                open_scene="story_handoff",
+                source_prompt=action.result,
+            )
+            return True
+
+        if action.key == "story_stage_incident_review":
+            self._ensure_story_incident_ticket(context)
+            context.incident_review_staged = True
+            self._set_story_context(module_key, context)
+            self._open_story_scene(module_key, "story_incident_review", action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_open_approval_queue":
+            self._open_story_scene(module_key, "story_approval_queue", action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_export_summary":
+            self._ensure_story_incident_ticket(context)
+            context.export_ready = True
+            self._set_story_context(module_key, context)
+            self._open_story_scene(module_key, "story_export", action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_return_home_keep_memory":
+            self._clear_detail_state(module_key)
+            self._append_story_message(module_key, action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_review_prepared_request":
+            approval_key = self._story_primary_prepared_key()
+            if approval_key is None:
+                self._open_story_scene(module_key, "story_approval_queue", "No staged approval request is currently available for review.", source_prompt=action.label)
+                return True
+            self.detail_navigation_active = True
+            self.detail_view_key = f"approval_detail:{approval_key}"
+            self.detail_action_index = 0
+            self.detail_return_view_key = "story_approval_queue"
+            self._remember_detail_state(module_key)
+            approval = self._pending_approval_for_key(approval_key)
+            if approval is not None:
+                self._append_history(
+                    module_key,
+                    ConversationEntry(
+                        role="assistant",
+                        text=action.result,
+                        kind="home_action",
+                        context_key="",
+                        action_key=f"approval_detail:{approval.key}",
+                    ),
+                )
+            return True
+
+        if action.key == "story_hold_prepared_request":
+            approval_key = self._story_primary_prepared_key()
+            if approval_key is not None:
+                self.pending_approval_state_by_key[approval_key] = "on_hold"
+            self._open_story_scene(module_key, "story_approval_queue", action.result, source_prompt=action.label)
+            return True
+
+        return False
 
     def action_picker_up(self) -> None:
         if self.processing:
@@ -1559,6 +2504,9 @@ class PathfinderPrototypeApp(App[None]):
                 self.histories[key].clear()
                 self.investigation_state_by_module[key] = None
                 self.detail_state_by_module[key] = None
+                self.verification_profile_by_module[key] = None
+                self.story_context_by_module[key] = None
+                self.story_mode_return_state_by_module[key] = None
             self.home_navigation_active = False
             self.module_picker_active = False
             self._clear_investigation_state(module.key)
@@ -1577,6 +2525,10 @@ class PathfinderPrototypeApp(App[None]):
                 module.key,
                 ConversationEntry(role="assistant", text=f"Cleared conversation history for {module.label}."),
             )
+            return
+
+        if command_lower == "/story":
+            self._open_story_mode(module.key)
             return
 
         if command_lower.startswith("/module") or command_lower.startswith("/app"):
@@ -1722,6 +2674,42 @@ class PathfinderPrototypeApp(App[None]):
         return active_case.next_actions[self.investigation_action_index]
 
     def _active_detail_actions(self) -> tuple[InvestigationAction, ...]:
+        if self.detail_view_key == "story_ambiguity":
+            return STORY_AMBIGUITY_ACTIONS
+        if self.detail_view_key == "story_scope_confirm":
+            return STORY_SCOPE_CONFIRM_ACTIONS
+        if self.detail_view_key == "story_scope_custom":
+            return STORY_SCOPE_CUSTOM_ACTIONS
+        if self.detail_view_key == "story_role_limits":
+            return STORY_ROLE_LIMITS_ACTIONS
+        if self.detail_view_key == "story_memory_state":
+            return STORY_MEMORY_ACTIONS
+        if self.detail_view_key == "story_findings":
+            return STORY_FINDINGS_ACTIONS
+        if self.detail_view_key == "story_session_relatedness":
+            return STORY_SESSION_RELATEDNESS_ACTIONS
+        if self.detail_view_key == "story_approval_evidence":
+            return STORY_APPROVAL_EVIDENCE_ACTIONS
+        if self.detail_view_key == "story_privilege_path":
+            return STORY_PRIVILEGE_PATH_ACTIONS
+        if self.detail_view_key == "story_assets":
+            return STORY_ASSETS_ACTIONS
+        if self.detail_view_key == "story_asset_detail":
+            return STORY_ASSET_DETAIL_ACTIONS
+        if self.detail_view_key == "story_containment":
+            return STORY_CONTAINMENT_ACTIONS
+        if self.detail_view_key == "story_incident_review":
+            return STORY_INCIDENT_REVIEW_ACTIONS
+        if self.detail_view_key == "story_handoff":
+            return STORY_HANDOFF_ACTIONS
+        if self.detail_view_key == "story_approval_queue":
+            return STORY_APPROVAL_QUEUE_ACTIONS
+        if self.detail_view_key == "story_export":
+            return STORY_EXPORT_ACTIONS
+        if self.detail_view_key == "story_menu":
+            return STORY_MENU_ACTIONS
+        if self.detail_view_key and self.detail_view_key.startswith("story_mode_"):
+            return STORY_MENU_RETURN_ACTIONS
         if self.detail_view_key == "live_session":
             return LIVE_SESSION_FOLLOWUP_ACTIONS
         if self.detail_view_key == "target_activity":
@@ -1740,6 +2728,46 @@ class PathfinderPrototypeApp(App[None]):
             return self._pending_approval_queue_actions()
         if self.detail_view_key and self.detail_view_key.startswith("approval_detail:"):
             return PENDING_APPROVAL_DETAIL_ACTIONS
+        return ()
+
+    def _active_story_detail_actions(self, detail_view_key: str | None = None) -> tuple[InvestigationAction, ...]:
+        scene_key = detail_view_key or self.detail_view_key
+        if scene_key == "story_ambiguity":
+            return STORY_AMBIGUITY_ACTIONS
+        if scene_key == "story_scope_confirm":
+            return STORY_SCOPE_CONFIRM_ACTIONS
+        if scene_key == "story_scope_custom":
+            return STORY_SCOPE_CUSTOM_ACTIONS
+        if scene_key == "story_role_limits":
+            return STORY_ROLE_LIMITS_ACTIONS
+        if scene_key == "story_memory_state":
+            return STORY_MEMORY_ACTIONS
+        if scene_key == "story_findings":
+            return STORY_FINDINGS_ACTIONS
+        if scene_key == "story_session_relatedness":
+            return STORY_SESSION_RELATEDNESS_ACTIONS
+        if scene_key == "story_approval_evidence":
+            return STORY_APPROVAL_EVIDENCE_ACTIONS
+        if scene_key == "story_privilege_path":
+            return STORY_PRIVILEGE_PATH_ACTIONS
+        if scene_key == "story_assets":
+            return STORY_ASSETS_ACTIONS
+        if scene_key == "story_asset_detail":
+            return STORY_ASSET_DETAIL_ACTIONS
+        if scene_key == "story_containment":
+            return STORY_CONTAINMENT_ACTIONS
+        if scene_key == "story_incident_review":
+            return STORY_INCIDENT_REVIEW_ACTIONS
+        if scene_key == "story_handoff":
+            return STORY_HANDOFF_ACTIONS
+        if scene_key == "story_approval_queue":
+            return STORY_APPROVAL_QUEUE_ACTIONS
+        if scene_key == "story_export":
+            return STORY_EXPORT_ACTIONS
+        if scene_key == "story_menu":
+            return STORY_MENU_ACTIONS
+        if scene_key and scene_key.startswith("story_mode_"):
+            return STORY_MENU_RETURN_ACTIONS
         return ()
 
     def _set_verification_profile(self, module_key: str, profile_key: str | None) -> None:
@@ -1849,6 +2877,8 @@ class PathfinderPrototypeApp(App[None]):
         self.investigation_state_by_module[module_key] = None
         self.detail_state_by_module[module_key] = None
         self.verification_profile_by_module[module_key] = None
+        self.story_context_by_module[module_key] = None
+        self.story_mode_return_state_by_module[module_key] = None
         if self._active_module().key != module_key:
             return
         self.detail_navigation_active = False
@@ -1859,6 +2889,7 @@ class PathfinderPrototypeApp(App[None]):
         self.investigation_navigation_active = False
         self.investigation_case_key = None
         self.investigation_action_index = 0
+        self.story_context = None
 
     def _remember_investigation_state(self, module_key: str) -> None:
         if not self.investigation_navigation_active or not self.investigation_case_key:
@@ -1923,7 +2954,27 @@ class PathfinderPrototypeApp(App[None]):
             return
 
         detail_view_key, action_index, return_view_key = saved_state
-        if detail_view_key == "live_session":
+        if detail_view_key in {
+            "story_ambiguity",
+            "story_scope_confirm",
+            "story_scope_custom",
+            "story_role_limits",
+            "story_memory_state",
+            "story_findings",
+            "story_session_relatedness",
+            "story_approval_evidence",
+            "story_privilege_path",
+            "story_assets",
+            "story_asset_detail",
+            "story_containment",
+            "story_incident_review",
+            "story_handoff",
+            "story_approval_queue",
+            "story_export",
+            "story_menu",
+        } or detail_view_key.startswith("story_mode_"):
+            detail_actions = self._active_story_detail_actions(detail_view_key)
+        elif detail_view_key == "live_session":
             detail_actions = LIVE_SESSION_FOLLOWUP_ACTIONS
         elif detail_view_key == "target_activity":
             detail_actions = TARGET_ACTIVITY_FOLLOWUP_ACTIONS
@@ -1986,6 +3037,7 @@ class PathfinderPrototypeApp(App[None]):
         self.module_picker_index = self._picker_index_for_active_module()
         self.module_picker_active = False
         self.home_navigation_active = False
+        self._restore_story_context(self._active_module().key)
         self._restore_investigation_state(self._active_module().key)
         self._restore_detail_state(self._active_module().key)
 
@@ -1994,6 +3046,10 @@ class PathfinderPrototypeApp(App[None]):
             return self._build_portfolio_cover_renderables()
         if scene_key == "temp_sunset_scene":
             return self._build_temp_sunset_scene_renderables()
+        if scene_key == "story_menu":
+            return self._build_story_menu_renderables()
+        if scene_key and scene_key.startswith("story_mode_"):
+            return self._build_story_mode_renderables(scene_key)
         return None
 
     def _scene_chrome_label(self, scene_key: str | None = None) -> str | None:
@@ -2003,6 +3059,8 @@ class PathfinderPrototypeApp(App[None]):
             return "Cover"
         if scene_key == "temp_sunset_scene":
             return "Loading"
+        if scene_key == "story_menu" or (scene_key and scene_key.startswith("story_mode_")):
+            return "Story"
         return None
 
     def _scene_footer_hint(self, scene_key: str | None = None) -> Text | None:
@@ -2023,6 +3081,14 @@ class PathfinderPrototypeApp(App[None]):
             text.append("loading-screen style PATHFINDER CLI splash", style=PALETTE["text_main"])
             text.append(" | ", style=PALETTE["line"])
             text.append("type /reset to return", style=PALETTE["text_muted"])
+            return text
+        if scene_key == "story_menu" or (scene_key and scene_key.startswith("story_mode_")):
+            text = Text()
+            text.append("hidden story mode", style=f"bold {PALETTE['orange_primary']}")
+            text.append(" | ", style=PALETTE["line"])
+            text.append("presentation-ready design lens", style=PALETTE["text_main"])
+            text.append(" | ", style=PALETTE["line"])
+            text.append("Esc or q returns", style=PALETTE["text_muted"])
             return text
         return None
 
@@ -2185,12 +3251,12 @@ class PathfinderPrototypeApp(App[None]):
     def _build_password_safe_status_text(self) -> Text:
         waiting = sum(
             1
-            for approval in PENDING_APPROVALS
+            for approval in self._all_pending_approvals()
             if approval.source == "Password Safe" and self._pending_approval_state(approval.key) == "waiting"
         )
         break_glass = sum(
             1
-            for approval in PENDING_APPROVALS
+            for approval in self._all_pending_approvals()
             if approval.source == "Password Safe"
             and "break-glass" in approval.request.lower()
             and self._pending_approval_state(approval.key) == "waiting"
@@ -2306,7 +3372,7 @@ class PathfinderPrototypeApp(App[None]):
         table.add_column("State", no_wrap=True, min_width=11)
         table.add_column("Why it is stalled", min_width=28)
 
-        for approval in PENDING_APPROVALS:
+        for approval in self._all_pending_approvals():
             if approval.source != "Password Safe":
                 continue
             table.add_row(
@@ -2693,6 +3759,12 @@ class PathfinderPrototypeApp(App[None]):
                 renderables.extend(investigation_renderables)
             else:
                 renderables.append(self._plain_text(entry.text))
+        elif entry.kind == "story_scene":
+            story_renderables = self._build_story_renderables(entry.action_key)
+            if story_renderables:
+                renderables.extend(story_renderables)
+            else:
+                renderables.append(self._plain_text(entry.text))
         elif entry.kind == "home_action":
             home_action_renderables = self._build_home_action_renderables(entry.action_key)
             if home_action_renderables:
@@ -2803,6 +3875,150 @@ class PathfinderPrototypeApp(App[None]):
         }.get(option, "warn")
         return self._build_badge(option, tone)
 
+    def _all_pending_approvals(self) -> tuple[PendingApproval, ...]:
+        return tuple(self.pending_approvals)
+
+    def _default_story_context(self) -> StoryContext:
+        return StoryContext(role_label=self.user_role)
+
+    def _story_prompt_matches_entry(self, prompt: str) -> bool:
+        normalized = " ".join(prompt.strip().lower().split())
+        return normalized == STORY_ENTRY_PROMPT
+
+    def _story_context_active(self) -> bool:
+        return self.story_context is not None
+
+    def _set_story_context(self, module_key: str, context: StoryContext | None) -> None:
+        self.story_context_by_module[module_key] = context
+        if self._active_module().key == module_key:
+            self.story_context = context
+
+    def _restore_story_context(self, module_key: str) -> None:
+        self.story_context = self.story_context_by_module.get(module_key)
+
+    def _clear_story_context(self, module_key: str) -> None:
+        self.story_context_by_module[module_key] = None
+        if self._active_module().key == module_key:
+            self.story_context = None
+
+    def _story_scene_active(self) -> bool:
+        return bool(
+            self.detail_view_key
+            and self.detail_view_key.startswith("story_")
+            and not self._story_mode_active()
+        )
+
+    def _story_mode_active(self) -> bool:
+        return bool(self.detail_view_key and (self.detail_view_key == "story_menu" or self.detail_view_key.startswith("story_mode_")))
+
+    def _capture_story_mode_return_state(self, module_key: str) -> None:
+        self.story_mode_return_state_by_module[module_key] = StoryModeReturnState(
+            module_picker_active=self.module_picker_active,
+            home_navigation_active=self.home_navigation_active,
+            investigation_navigation_active=self.investigation_navigation_active,
+            investigation_case_key=self.investigation_case_key,
+            investigation_action_index=self.investigation_action_index,
+            detail_navigation_active=self.detail_navigation_active,
+            detail_view_key=self.detail_view_key,
+            detail_action_index=self.detail_action_index,
+            detail_return_view_key=self.detail_return_view_key,
+            verification_profile_key=self.verification_profile_key,
+        )
+
+    def _restore_story_mode_return_state(self, module_key: str) -> None:
+        saved_state = self.story_mode_return_state_by_module.get(module_key)
+        self.story_mode_return_state_by_module[module_key] = None
+        if saved_state is None:
+            self._clear_detail_state(module_key)
+            return
+
+        self.module_picker_active = saved_state.module_picker_active
+        self.home_navigation_active = saved_state.home_navigation_active
+        self.investigation_navigation_active = saved_state.investigation_navigation_active
+        self.investigation_case_key = saved_state.investigation_case_key
+        self.investigation_action_index = saved_state.investigation_action_index
+        self.detail_navigation_active = saved_state.detail_navigation_active
+        self.detail_view_key = saved_state.detail_view_key
+        self.detail_action_index = saved_state.detail_action_index
+        self.detail_return_view_key = saved_state.detail_return_view_key
+        self.verification_profile_key = saved_state.verification_profile_key
+        self._remember_investigation_state(module_key)
+        self._remember_detail_state(module_key)
+        self._set_verification_profile(module_key, saved_state.verification_profile_key)
+
+    def _story_scene_name(self, scene_key: str) -> str:
+        return {
+            "story_ambiguity": "ambiguity handling",
+            "story_scope_confirm": "scope confirmation",
+            "story_scope_custom": "scope customization",
+            "story_role_limits": "role limits",
+            "story_memory_state": "memory state",
+            "story_findings": "findings summary",
+            "story_session_relatedness": "session relatedness",
+            "story_approval_evidence": "approval evidence",
+            "story_privilege_path": "privilege path",
+            "story_assets": "affected assets",
+            "story_asset_detail": "top asset detail",
+            "story_containment": "containment options",
+            "story_incident_review": "incident review draft",
+            "story_handoff": "controlled handoff",
+            "story_approval_queue": "approval queue",
+            "story_export": "summary export",
+        }.get(scene_key, "story view")
+
+    def _story_scene_result_text(self, scene_key: str, *, returned: bool = False) -> str:
+        prefix = "Returned to" if returned else "Opened"
+        return f"{prefix} {self._story_scene_name(scene_key)}."
+
+    def _story_pending_approval(self, approval_key: str) -> PendingApproval | None:
+        for approval in self._all_pending_approvals():
+            if approval.key == approval_key:
+                return approval
+        return None
+
+    def _stage_story_pending_approval(self, approval: PendingApproval) -> None:
+        for index, existing in enumerate(self.pending_approvals):
+            if existing.key == approval.key:
+                self.pending_approvals[index] = approval
+                break
+        else:
+            self.pending_approvals.append(approval)
+        self.pending_approval_state_by_key[approval.key] = "waiting"
+
+    def _ensure_story_incident_ticket(self, context: StoryContext) -> str:
+        if context.incident_ticket is None:
+            context.incident_ticket = "INC-24817"
+        return context.incident_ticket
+
+    def _prepared_story_approval_keys(self, *, include_session: bool, include_path: bool) -> tuple[str, ...]:
+        keys: list[str] = []
+        if include_session:
+            keys.append("story-pra-2214-terminate")
+        if include_path:
+            keys.append("story-aws-prod-admin-suspend")
+        return tuple(keys)
+
+    def _story_primary_prepared_key(self) -> str | None:
+        context = self._story_current_context()
+        if context.prepared_approval_keys:
+            return context.prepared_approval_keys[0]
+        return None
+
+    def _open_story_mode(self, module_key: str) -> None:
+        if not self._story_mode_active():
+            self._capture_story_mode_return_state(module_key)
+        self.module_picker_active = False
+        self.home_navigation_active = False
+        self.investigation_navigation_active = False
+        self.detail_navigation_active = True
+        self.detail_view_key = "story_menu"
+        self.detail_action_index = 0
+        self.detail_return_view_key = None
+        self._remember_detail_state(module_key)
+
+    def _close_story_mode(self, module_key: str) -> None:
+        self._restore_story_mode_return_state(module_key)
+
     def _graph_spotlight_for_key(self, graph_key: str) -> GraphSpotlight | None:
         for spotlight in GRAPH_SPOTLIGHTS:
             if spotlight.key == graph_key:
@@ -2834,13 +4050,13 @@ class PathfinderPrototypeApp(App[None]):
         return tuple(actions)
 
     def _pending_approval_for_key(self, approval_key: str) -> PendingApproval | None:
-        for approval in PENDING_APPROVALS:
+        for approval in self._all_pending_approvals():
             if approval.key == approval_key:
                 return approval
         return None
 
     def _pending_approval_index(self, approval_key: str) -> int:
-        for index, approval in enumerate(PENDING_APPROVALS):
+        for index, approval in enumerate(self._all_pending_approvals()):
             if approval.key == approval_key:
                 return index
         return 0
@@ -2875,7 +4091,7 @@ class PathfinderPrototypeApp(App[None]):
 
     def _pending_approval_queue_actions(self) -> tuple[InvestigationAction, ...]:
         actions: list[InvestigationAction] = []
-        for approval in PENDING_APPROVALS:
+        for approval in self._all_pending_approvals():
             state = self._pending_approval_state(approval.key)
             actions.append(
                 InvestigationAction(
@@ -3007,6 +4223,888 @@ class PathfinderPrototypeApp(App[None]):
         if entry.action_key == "post_action_verification":
             return self._build_verification_renderables()
         return []
+
+    def _story_current_context(self) -> StoryContext:
+        return self.story_context or self._default_story_context()
+
+    def _build_story_renderables(self, action_key: str) -> list[object]:
+        if action_key == "story_ambiguity":
+            return self._build_story_ambiguity_renderables()
+        if action_key == "story_scope_confirm":
+            return self._build_story_scope_confirm_renderables()
+        if action_key == "story_scope_custom":
+            return self._build_story_scope_custom_renderables()
+        if action_key == "story_role_limits":
+            return self._build_story_role_limits_renderables()
+        if action_key == "story_memory_state":
+            return self._build_story_memory_state_renderables()
+        if action_key == "story_findings":
+            return self._build_story_findings_renderables()
+        if action_key == "story_session_relatedness":
+            return self._build_story_session_relatedness_renderables()
+        if action_key == "story_approval_evidence":
+            return self._build_story_approval_evidence_renderables()
+        if action_key == "story_privilege_path":
+            return self._build_story_privilege_path_renderables()
+        if action_key == "story_assets":
+            return self._build_story_assets_renderables()
+        if action_key == "story_asset_detail":
+            return self._build_story_asset_detail_renderables()
+        if action_key == "story_containment":
+            return self._build_story_containment_renderables()
+        if action_key == "story_incident_review":
+            return self._build_story_incident_review_renderables()
+        if action_key == "story_handoff":
+            return self._build_story_handoff_renderables()
+        if action_key == "story_approval_queue":
+            return self._build_story_approval_queue_renderables()
+        if action_key == "story_export":
+            return self._build_story_export_renderables()
+        return []
+
+    def _build_story_header_text(self, title: str, subtitle: str) -> Text:
+        text = Text()
+        text.append(title, style=f"bold {PALETTE['orange_soft']}")
+        text.append("\n", style=PALETTE["text_main"])
+        text.append(subtitle, style=PALETTE["text_muted"])
+        return text
+
+    def _build_story_state_line(self, parts: tuple[tuple[str, str], ...]) -> Text:
+        text = Text()
+        for index, (label, tone) in enumerate(parts):
+            text.append("[", style=PALETTE["line"])
+            text.append(label, style=self._status_style(tone))
+            text.append("]", style=PALETTE["line"])
+            if index < len(parts) - 1:
+                text.append(" ", style=PALETTE["text_main"])
+        return text
+
+    def _build_story_followup_lines(self, scene_key: str) -> list[Text]:
+        actions = self._active_story_detail_actions(scene_key)
+        lines: list[Text] = []
+        for index, action in enumerate(actions):
+            selected = (
+                self.detail_navigation_active
+                and self.detail_view_key == scene_key
+                and self.detail_action_index == index
+            )
+            line = Text()
+            line.append("> " if selected else "  ", style=f"bold {PALETTE['orange_primary']}" if selected else PALETTE["line"])
+            line.append(action.label, style=f"bold {PALETTE['orange_primary']}" if selected else PALETTE["text_main"])
+            if selected:
+                line.stylize(f"on {PALETTE['bg_soft']}")
+            lines.append(line)
+        return lines
+
+    def _build_story_memory_panel(self) -> Panel:
+        context = self._story_current_context()
+        text = Text()
+        rows = (
+            ("entity", context.entity),
+            ("environment", context.environment or "missing"),
+            ("time range", context.time_range or "missing"),
+            ("goal", context.goal or "missing"),
+        )
+        width = max(len(label) for label, _ in rows) + 2
+        for index, (label, value) in enumerate(rows):
+            text.append(label.ljust(width), style=PALETTE["text_muted"])
+            text.append(value, style=f"bold {PALETTE['text_main']}" if value != "missing" else self._status_style("warn"))
+            if index < len(rows) - 1:
+                text.append("\n", style=PALETTE["text_main"])
+        return Panel(text, title="Active investigation", box=TABLE_BOX, expand=True, border_style=PALETTE["line"], padding=(0, 1))
+
+    def _build_story_ambiguity_slots_panel(self) -> Panel:
+        context = self._story_current_context()
+        rows = (
+            ("environment", context.environment),
+            ("time range", context.time_range),
+            ("goal", context.goal),
+            ("acting role", context.role_label),
+        )
+        text = Text()
+        for index, (label, value) in enumerate(rows):
+            text.append(label.ljust(16), style=PALETTE["text_muted"])
+            text.append(". ", style=PALETTE["line"])
+            if value is None:
+                text.append("missing", style=self._status_style("warn"))
+            else:
+                text.append("resolved", style=self._status_style("ok"))
+                text.append("  ", style=PALETTE["text_main"])
+                text.append(value, style=PALETTE["text_main"])
+            if index < len(rows) - 1:
+                text.append("\n", style=PALETTE["text_main"])
+        return Panel(text, title="Missing context", box=TABLE_BOX, expand=True, border_style=PALETTE["line"], padding=(0, 1))
+
+    def _build_story_planner_text(self) -> Text:
+        steps = (
+            "classify task",
+            "inspect identity risk",
+            "inspect live privileged session",
+            "compare approval / entitlement context",
+            "summarize findings",
+            "recommend safe next steps",
+        )
+        text = Text()
+        for index, step in enumerate(steps, start=1):
+            text.append(f"{index}. ", style=f"bold {PALETTE['orange_primary']}")
+            text.append(step, style=PALETTE["text_main"])
+            if index < len(steps):
+                text.append("\n", style=PALETTE["text_main"])
+        return text
+
+    def _build_story_sources_text(self) -> Text:
+        text = Text()
+        sources = ("Identity Security Insights", "Privileged Remote Access", "Password Safe", "Entitle")
+        for index, source in enumerate(sources):
+            text.append("- ", style=f"bold {PALETTE['orange_pale']}")
+            text.append(source, style=PALETTE["text_main"])
+            if index < len(sources) - 1:
+                text.append("\n", style=PALETTE["text_main"])
+        return text
+
+    def _build_story_restricted_text(self) -> Text:
+        text = Text()
+        for index, item in enumerate(STORY_ROLE_RESTRICTIONS):
+            text.append("- ", style=f"bold {PALETTE['warn']}")
+            text.append(item, style=PALETTE["text_main"])
+            if index < len(STORY_ROLE_RESTRICTIONS) - 1:
+                text.append("\n", style=PALETTE["text_main"])
+        return text
+
+    def _build_story_source_alignment_table(self) -> Table:
+        table = Table(
+            box=TABLE_BOX,
+            expand=True,
+            show_lines=True,
+            border_style=PALETTE["line"],
+            header_style=f"bold {PALETTE['orange_soft']}",
+            padding=(0, 1),
+            pad_edge=False,
+        )
+        table.add_column("Source", min_width=20)
+        table.add_column("State", min_width=12)
+        table.add_column("Why it matters", min_width=44)
+        rows = (
+            ("Identity Security Insights", "linked", "svc-backup-ops still resolves into a privileged production path"),
+            ("Privileged Remote Access", "active", "pra-2214 is live and already interacting with production scope"),
+            ("Password Safe", "no proof", "no attached evidence currently explains the active privileged work"),
+            ("Entitle", "mismatch", "the latest production approval artifact does not cleanly match the live session"),
+        )
+        for source, state, note in rows:
+            tone = "ok" if state == "linked" else "warn" if state in {"no proof", "mismatch"} else "accent"
+            table.add_row(Text(source, style=PALETTE["text_main"]), self._build_badge(state, tone), Text(note, style=PALETTE["text_muted"]))
+        return table
+
+    def _build_story_privilege_graph_text(self) -> Text:
+        context = self._story_current_context()
+        text = Text()
+        self._append_privilege_path_line(text, "", "ID", "accent", context.entity, f"bold {PALETTE['text_main']}")
+        self._append_privilege_path_connector(text, "  ")
+        self._append_privilege_path_line(text, "  +-- ", "GRP", "violet", "grp-cloud-admins", f"bold {PALETTE['violet']}")
+        self._append_privilege_path_line(text, "      +-- ", "ROLE", "risk", "aws-prod-admin", self._status_style("risk"))
+        self._append_privilege_path_line(text, "          +-- ", "SESSION", "teal", context.active_session, f"bold {PALETTE['teal']}", suffix="ACTIVE", suffix_style=self._status_style("warn"))
+        self._append_privilege_path_line(text, "          +-- ", "APPROVAL", "warn", "evidence missing", self._status_style("warn"))
+        self._append_privilege_path_line(text, "          +-- ", "SCOPE", "info", "production", PALETTE["text_main"])
+        return text
+
+    def _build_story_timeline_text(self) -> Text:
+        text = Text()
+        rows = (
+            ("19:32", "OPEN", "session opened"),
+            ("19:34", "SCOPE", "admin scope confirmed"),
+            ("19:36", "REVIEW", "backup policy viewed"),
+            ("19:37", "FLAG", "credential-related action attempted"),
+            ("19:38", "READ", "production config read"),
+        )
+        for index, (time_label, tag, detail) in enumerate(rows):
+            marker = "o" if index < 2 else "^"
+            text.append(f"{time_label}  {marker} {tag:<7} {detail}", style=PALETTE["text_main"])
+            if index < len(rows) - 1:
+                text.append("\n", style=PALETTE["text_main"])
+                text.append("       |", style=PALETTE["text_muted"])
+                text.append("\n", style=PALETTE["text_main"])
+        return text
+
+    def _build_story_signal_bars_text(self, rows: tuple[tuple[str, int, str], ...]) -> Text:
+        width = max(len(label) for label, _, _ in rows) + 2
+        text = Text()
+        for index, (label, value, suffix) in enumerate(rows):
+            text.append(label.ljust(width), style=PALETTE["text_muted"])
+            text.append_text(self._bar(value, width=10))
+            text.append(f" {suffix}", style=PALETTE["text_main"])
+            if index < len(rows) - 1:
+                text.append("\n", style=PALETTE["text_main"])
+        return text
+
+    def _build_story_asset_grouping_text(self) -> Text:
+        text = Text()
+        text.append("Critical\n", style=f"bold {PALETTE['risk']}")
+        text.append("- prod-sql-07      session overlap\n", style=PALETTE["text_main"])
+        text.append("\nHigh\n", style=f"bold {PALETTE['orange_pale']}")
+        text.append("- prod-app-12      path overlap\n", style=PALETTE["text_main"])
+        text.append("- prod-app-14      path overlap\n", style=PALETTE["text_main"])
+        text.append("\nMedium\n", style=f"bold {PALETTE['teal']}")
+        text.append("- prod-backup-03   behavior drift", style=PALETTE["text_main"])
+        return text
+
+    def _build_story_containment_options_table(self) -> Table:
+        table = Table(
+            box=TABLE_BOX,
+            expand=True,
+            show_lines=True,
+            border_style=PALETTE["line"],
+            header_style=f"bold {PALETTE['orange_soft']}",
+            padding=(0, 1),
+            pad_edge=False,
+        )
+        table.add_column("Action", min_width=25)
+        table.add_column("Risk", min_width=10)
+        table.add_column("Session", min_width=15)
+        table.add_column("Path", min_width=12)
+        table.add_column("Impact", min_width=14)
+        table.add_column("Approval", min_width=10)
+        rows = (
+            ("revoke PRA session only", "91 -> 63", "closed", "remains", "medium", "yes"),
+            ("suspend reachable path only", "91 -> 41", "may persist", "broken", "low-med", "yes"),
+            ("do both after approval", "91 -> 19", "closed", "broken", "med-high", "yes"),
+            ("stage incident review only", "91 -> 91", "unchanged", "unchanged", "low", "no"),
+        )
+        for action, risk, session, path, impact, approval in rows:
+            tone = "ok" if risk.endswith("19") else "warn" if approval == "yes" else "info"
+            table.add_row(
+                Text(action, style=PALETTE["text_main"]),
+                Text(risk, style=self._status_style("warn" if tone != "ok" else "ok")),
+                Text(session, style=PALETTE["text_main"]),
+                Text(path, style=PALETTE["text_main"]),
+                Text(impact, style=PALETTE["text_main"]),
+                self._build_badge(approval, "risk" if approval == "yes" else "ok"),
+            )
+        return table
+
+    def _build_story_decision_cues_table(self) -> Table:
+        table = Table(
+            box=TABLE_BOX,
+            expand=True,
+            show_lines=True,
+            border_style=PALETTE["line"],
+            header_style=f"bold {PALETTE['orange_soft']}",
+            padding=(0, 1),
+            pad_edge=False,
+        )
+        table.add_column("Cue", min_width=18)
+        table.add_column("Best fit", min_width=20)
+        table.add_column("Why", min_width=42)
+        rows = (
+            ("fastest", "do both after approval", "best immediate and durable reduction once a reviewer approves"),
+            ("most durable", "suspend reachable path only", "breaks future path reuse even if the current session is revalidated"),
+            ("lowest disruption", "stage incident review only", "keeps evidence moving without touching production access"),
+        )
+        for cue, choice, why in rows:
+            table.add_row(Text(cue, style=f"bold {PALETTE['orange_pale']}"), Text(choice, style=PALETTE["text_main"]), Text(why, style=PALETTE["text_muted"]))
+        return table
+
+    def _build_story_prepared_packet_text(self) -> Text:
+        context = self._story_current_context()
+        text = Text()
+        items: list[str] = []
+        if "story-pra-2214-terminate" in context.prepared_approval_keys:
+            items.append(f"terminate session: {context.active_session}")
+        if "story-aws-prod-admin-suspend" in context.prepared_approval_keys:
+            items.append(f"suspend path: {context.reachable_path}")
+        if not items:
+            items.append("incident review only: no privileged action staged")
+        items.extend(
+            (
+                f"reason: correlated privileged activity tied to {context.entity}",
+                "urgency: high",
+            )
+        )
+        for index, item in enumerate(items):
+            text.append("- ", style=f"bold {PALETTE['orange_pale']}")
+            text.append(item, style=PALETTE["text_main"])
+            if index < len(items) - 1:
+                text.append("\n", style=PALETTE["text_main"])
+        return text
+
+    def _build_story_prepared_queue_table(self) -> Table:
+        context = self._story_current_context()
+        staged = set(context.prepared_approval_keys)
+        approvals = list(self._all_pending_approvals())
+        approvals.sort(key=lambda approval: (approval.key not in staged, approval.source, approval.request))
+        table = Table(
+            box=TABLE_BOX,
+            expand=True,
+            show_lines=True,
+            border_style=PALETTE["line"],
+            header_style=f"bold {PALETTE['orange_soft']}",
+            padding=(0, 1),
+            pad_edge=False,
+        )
+        table.add_column("Src", min_width=10)
+        table.add_column("Request", min_width=28)
+        table.add_column("Requester", min_width=20)
+        table.add_column("State", min_width=14)
+        for approval in approvals:
+            highlight = approval.key in staged
+            table.add_row(
+                Text(approval.source, style=f"bold {PALETTE['purple']}"),
+                Text(approval.request, style=PALETTE["text_main"]),
+                Text(approval.requester, style=PALETTE["text_main"]),
+                self._pending_approval_state_badge(approval),
+                style=f"on {PALETTE['bg_soft']}" if highlight else "",
+            )
+        return table
+
+    def _build_story_ambiguity_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Ambiguity handling", "Intent received but scope is still missing"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("active investigation", "info"), ("role-aware", "ok"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Intent line", Text("Investigate suspicious lateral movement tied to a service account.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_ambiguity_slots_panel())
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Current role", Text("SOC Analyst II can investigate, compare approvals, and prepare requests, but cannot execute high-risk privileged changes.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Why I'm asking", Text("Pathfinder does not have enough scope yet to recommend a production-safe next move. Environment, time range, and goal are still required.", style=PALETTE["text_muted"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Select next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_ambiguity"))
+        return renderables
+
+    def _build_story_scope_confirm_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Scope confirmation", "Session memory is now active for the current investigation"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("active investigation", "info"), ("session memory active", "ok"), ("role-aware", "ok"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_memory_panel())
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Planner", self._build_story_planner_text()))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Data sources to query", self._build_story_sources_text()))
+        renderables.append(Text(""))
+        renderables.append(Text("Continue", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_scope_confirm"))
+        return renderables
+
+    def _build_story_scope_custom_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Customize scope", "Pathfinder is waiting for the minimum investigation scope"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("active investigation", "info"), ("confidence: medium", "warn"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Custom input guidance", Text("Use a follow-up like: production, last 24 hours, include containment recommendations.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_ambiguity_slots_panel())
+        renderables.append(Text(""))
+        renderables.append(Text("Select next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_scope_custom"))
+        return renderables
+
+    def _build_story_role_limits_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Role limits", "Current operator boundaries for the active story"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("role-aware", "ok"), ("restricted", "warn"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Allowed in this role", self._build_bullet_text(STORY_ROLE_CAPABILITIES)))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Restricted in this role", self._build_story_restricted_text()))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Boundary note", Text("Pathfinder can recommend and prepare reviewer-facing changes, but the analyst cannot bypass approval checks or reveal blocked data.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Select next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_role_limits"))
+        return renderables
+
+    def _build_story_memory_state_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Memory state", "Session-scoped memory for the active investigation"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("session memory active", "ok"), ("role-aware", "ok"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_memory_panel())
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Retention rules", Text("Pathfinder is keeping the entity, environment, time range, and goal in session memory. It is not storing secrets, raw privileged content, or one-time credentials.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Select next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_memory_state"))
+        return renderables
+
+    def _build_story_findings_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Findings summary", "svc-backup-ops now anchors the active investigation"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("active investigation", "info"), ("role-aware", "ok"), ("restricted", "warn"), ("session memory active", "ok"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Decision strip", Text("risk 91 | active PRA session pra-2214 | reachable admin path | approval evidence missing", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("AI assessment", Text("Pathfinder linked svc-backup-ops to a reachable production admin path, an active privileged session, and an approval artifact that does not yet line up cleanly. The pattern is notable, but some evidence is still restricted or missing.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_heading("Focused path"))
+        renderables.append(self._build_emphasis_panel(self._build_story_privilege_graph_text()))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_heading("Source alignment"))
+        renderables.append(self._build_story_source_alignment_table())
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Restricted in your role", self._build_story_restricted_text()))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Recommendation", Text("Assess whether the active session is likely related, then compare approval evidence before preparing any privileged response.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Investigate next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_findings"))
+        return renderables
+
+    def _build_story_session_relatedness_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Session relatedness", "Likely related, not confirmed"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("confidence: medium", "warn"), ("role-aware", "ok"), ("active investigation", "info"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Supporting signals", self._build_bullet_text(("temporal overlap between svc-backup-ops activity and pra-2214", "the same reachable path still lands in aws-prod-admin", "production reads began shortly after the privileged session opened"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Missing evidence", self._build_bullet_text(("no confirmed approval evidence tied directly to the live session", "raw privileged session contents are blocked in this role", "intent is still inferred rather than proven"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_heading("Timeline"))
+        renderables.append(self._build_emphasis_panel(self._build_story_timeline_text()))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Confidence meter", self._build_story_signal_bars_text((("temporal overlap", 82, "high"), ("identity overlap", 79, "high"), ("intent certainty", 58, "medium"), ("attribution confidence", 61, "medium")))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Sensitivity", self._build_story_signal_bars_text((("session risk", 84, "high"), ("target sensitivity", 95, "critical"), ("approval confidence", 31, "low")))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Best current read", Text("The privileged session is likely related to the same service-account path, but the evidence is still short of direct attribution. Treat it as medium confidence with escalation-ready evidence.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_session_relatedness"))
+        return renderables
+
+    def _build_story_approval_evidence_renderables(self) -> list[object]:
+        context = self._story_current_context()
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Approval evidence", "Role-aware comparison across PRA, Password Safe, and Entitle"))
+        renderables.append(Text(""))
+        labels = [("role-aware", "ok"), ("restricted", "warn")]
+        if context.approval_proof_requested:
+            labels.append(("approval proof requested", "info"))
+        renderables.append(self._build_story_state_line(tuple(labels)))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_heading("Evidence comparison"))
+        renderables.append(self._build_story_source_alignment_table())
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("What is blocked", Text("This role can compare approval state and mismatches, but it cannot reveal restricted secrets, raw session contents, or hidden credential details.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Recommendation", Text("Use the mismatch as approval-ready evidence, then move to the containment options if the session remains active.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_approval_evidence"))
+        return renderables
+
+    def _build_story_privilege_path_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Privilege path", "Service-account path into production admin"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("active investigation", "info"), ("approval required", "warn"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_heading("Focused path"))
+        renderables.append(self._build_emphasis_panel(self._build_story_privilege_graph_text()))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Why it matters", Text("The same group-to-role edge still exposes aws-prod-admin. Pathfinder can recommend suspending that path, but this analyst cannot execute the change directly.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Best break point", Text("grp-cloud-admins -> aws-prod-admin is the cleanest identity-native break point and is safer than broad downstream containment.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_privilege_path"))
+        return renderables
+
+    def _build_story_assets_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Affected assets", "Using the active investigation context already in session memory"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("session memory active", "ok"), ("active investigation", "info"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_memory_panel())
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Asset grouping", self._build_story_asset_grouping_text()))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Severity bars", self._build_story_signal_bars_text((("critical", 10, "1"), ("high", 20, "2"), ("medium", 10, "1")))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Why these are grouped this way", Text("Critical assets have direct session overlap. High assets sit on the same reachable path. Medium assets show contextual drift but no direct privileged overlap yet.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Highest-priority review", Text("prod-sql-07 is the top review target because it already overlaps the live session and the reachable admin path.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_assets"))
+        return renderables
+
+    def _build_story_asset_detail_renderables(self) -> list[object]:
+        context = self._story_current_context()
+        table = Table(
+            box=TABLE_BOX,
+            expand=True,
+            show_lines=True,
+            border_style=PALETTE["line"],
+            header_style=f"bold {PALETTE['orange_soft']}",
+            padding=(0, 1),
+            pad_edge=False,
+        )
+        table.add_column("Field", min_width=18, style=PALETTE["text_muted"])
+        table.add_column("Value", min_width=28)
+        table.add_column("Signal", min_width=14)
+        rows = (
+            ("asset", Text(context.top_asset, style=f"bold {PALETTE['teal']}"), self._build_badge("critical", "risk")),
+            ("relationship", Text("session overlap + path overlap", style=PALETTE["text_main"]), self._build_badge("linked", "accent")),
+            ("latest signal", Text("production config read at 19:38", style=PALETTE["text_main"]), self._build_badge("recent", "warn")),
+            ("review priority", Text("review before any broader production spread", style=PALETTE["text_main"]), self._build_badge("top", "ok")),
+        )
+        for label, value, signal in rows:
+            table.add_row(label, value, signal)
+
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Top asset detail", "Focused review target inside the active investigation"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("active investigation", "info"), ("critical asset", "risk"), ("session memory active", "ok"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_heading("Asset detail"))
+        renderables.append(table)
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Why Pathfinder surfaced this first", Text("prod-sql-07 is the highest-priority review because the asset already overlaps the live privileged session and sits directly on the reachable production admin path.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Suggested next move", Text("Use this asset detail as supporting evidence when comparing path-break options or preparing an incident review packet.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_asset_detail"))
+        return renderables
+
+    def _build_story_containment_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Containment options", "BeyondTrust-native access moves, not downstream host isolation"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("active investigation", "info"), ("approval required", "warn"), ("role-aware", "ok"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Current posture", Text("Current risk is 91. pra-2214 is still active, the reachable admin path remains intact, and approval evidence is still incomplete.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_heading("Containment options"))
+        renderables.append(self._build_story_containment_options_table())
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Risk reduction view", self._build_story_signal_bars_text((("current risk", 91, "91"), ("revoke session", 63, "63"), ("suspend path", 41, "41"), ("do both", 19, "19")))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_heading("Decision cues"))
+        renderables.append(self._build_story_decision_cues_table())
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Recommended response", Text("Prepare the combined response packet. It delivers the strongest reduction while keeping the analyst inside role boundaries and leaving the reviewer in control of the privileged change.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Boundary check", Text("This role can recommend and prepare reviewer-facing actions. It cannot finalize privileged session termination or reachable-path suspension without approval.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_containment"))
+        return renderables
+
+    def _build_story_incident_review_renderables(self) -> list[object]:
+        context = self._story_current_context()
+        ticket = self._ensure_story_incident_ticket(context)
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Incident review draft", "Evidence is packaged, but privileged execution is still blocked"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("role-aware", "ok"), ("restricted", "warn"), ("session memory active", "ok"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Draft summary", Text(f"{ticket} ties together the active PRA session, the reachable admin path, approval mismatch, and the grouped affected assets for reviewer handoff.", style=PALETTE['text_main'])))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Prepared evidence", self._build_bullet_text(("session timeline attached", "privilege path summary attached", "approval mismatch attached", "affected asset grouping attached"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Why this stays a draft", Text("The SOC analyst can create the review and prepare the recommendation, but privileged remediation still requires a reviewer to approve the staged change.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_incident_review"))
+        return renderables
+
+    def _build_story_handoff_renderables(self) -> list[object]:
+        context = self._story_current_context()
+        ticket = self._ensure_story_incident_ticket(context)
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Controlled handoff", "Approval-ready packet prepared without executing the privileged change"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("approval required", "warn"), ("session memory active", "ok"), ("active investigation", "info"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Prepared for approval", self._build_story_prepared_packet_text()))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Created artifacts", Text(f"incident review: {ticket}\napproval workflow: pending reviewer\nsession memory: active", style=PALETTE['text_main'])))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Why execution is blocked", Text("The recommended privileged actions are high-impact and production-linked. Pathfinder can package the request and evidence, but a reviewer must approve before execution.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Next safe actions", Text("Open the approval queue, review the draft incident record, or export the summary while keeping the live investigation in session memory.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_handoff"))
+        return renderables
+
+    def _build_story_approval_queue_renderables(self) -> list[object]:
+        context = self._story_current_context()
+        staged_count = len(context.prepared_approval_keys)
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Approval queue", "Staged requests are visible but still waiting on reviewer action"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("approval required", "warn"), ("review pending", "info"), ("session memory active", "ok"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Queue focus", Text(f"{staged_count} prepared request(s) from the active story are highlighted below for reviewer handoff.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_prepared_queue_table())
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Boundary note", Text("The main demo path stops here. Pathfinder can stage, review, and hold requests, but it does not auto-approve privileged changes.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_approval_queue"))
+        return renderables
+
+    def _build_story_export_renderables(self) -> list[object]:
+        context = self._story_current_context()
+        ticket = self._ensure_story_incident_ticket(context)
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Summary export", "Concise handoff package prepared for reviewers and incident partners"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("export ready", "ok"), ("session memory active", "ok"), ("role-aware", "ok"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Export includes", self._build_bullet_text((f"incident review reference: {ticket}", "service-account findings summary", "session timeline and confidence read", "approval mismatch comparison", "affected asset grouping and recommended path break"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Export posture", Text("This export is evidence-first and concise. It is designed to move the case forward without exposing blocked secrets or raw session contents.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_export"))
+        return renderables
+
+    def _build_story_menu_lines(self) -> list[Text]:
+        lines: list[Text] = []
+        for index, action in enumerate(STORY_MENU_ACTIONS, start=1):
+            selected = self.detail_navigation_active and self.detail_view_key == "story_menu" and self.detail_action_index == index - 1
+            line = Text()
+            line.append(f"[{index}] ", style=f"bold {PALETTE['orange_primary']}")
+            line.append(action.label, style=f"bold {PALETTE['orange_primary']}" if selected else f"bold {PALETTE['text_main']}")
+            line.append(" | ", style=PALETTE["line"])
+            line.append(action.summary, style=PALETTE["text_muted"])
+            if selected:
+                line.stylize(f"on {PALETTE['bg_soft']}")
+            lines.append(line)
+        return lines
+
+    def _build_story_mode_body_text(self, lines: tuple[str, ...]) -> Text:
+        text = Text()
+        for index, line in enumerate(lines):
+            if line == "":
+                text.append("\n", style=PALETTE["text_main"])
+            elif line.startswith("[") and line.endswith("]"):
+                text.append(line, style=PALETTE["text_muted"])
+            elif line in {"Probabilistic UX thinking", "Behavior spec", "Memory design", "Boundary and control", "Full AI-native structure", "Demo story summary", "Key idea"}:
+                text.append(line, style=f"bold {PALETTE['orange_soft']}")
+            elif line.startswith("Pathfinder should") or line.startswith("Security investigation assistant") or line.startswith("Summary") or line.startswith("Why it matters") or line.startswith("Evidence") or line.startswith("Recommendation") or line.startswith("Approval needed"):
+                text.append(line, style=PALETTE["text_main"])
+            elif line.startswith("Can ") or line.startswith("Does ") or line.startswith("Is ") or line.startswith("What ") or line.startswith("Who ") or line.startswith("How "):
+                text.append(line, style=f"bold {PALETTE['text_main']}")
+            elif "->" in line:
+                text.append(line, style=PALETTE["text_main"])
+            else:
+                text.append(line, style=PALETTE["text_main"])
+            if index < len(lines) - 1:
+                text.append("\n", style=PALETTE["text_main"])
+        return text
+
+    def _build_story_menu_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Story mode", "Hidden presentation views for screenshots and blog use"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_state_line((("story mode", "info"), ("presentation only", "warn"))))
+        renderables.append(Text(""))
+        renderables.append(self._build_section_block("Select a design lens", Text("These views are poster-like references for the AI-native Pathfinder concept. They do not change runtime state or approvals.", style=PALETTE["text_main"])))
+        renderables.append(Text(""))
+        renderables.extend(self._build_story_menu_lines())
+        renderables.append(Text(""))
+        renderables.append(Text("Use Up/Down and Enter to open a poster. Esc or q returns.", style=PALETTE["text_muted"]))
+        return renderables
+
+    def _build_story_mode_renderables(self, scene_key: str) -> list[object]:
+        content: dict[str, tuple[str, ...]] = {
+            "story_mode_probabilistic": (
+                "[story mode] [design lens]",
+                "",
+                "Probabilistic UX thinking",
+                "",
+                "User request",
+                "   ->",
+                "Can Pathfinder identify intent?",
+                "   ->",
+                "Does it have enough context?",
+                "   +-- No -> Ask 1 focused question",
+                "   +-- Yes",
+                "         ->",
+                "Can it support a recommendation with evidence?",
+                "   +-- No -> Show uncertainty + next best step",
+                "   +-- Yes",
+                "         ->",
+                "Is the next action high risk?",
+                "   +-- Yes -> Require approval",
+                "   +-- No -> Continue",
+                "",
+                "Key idea",
+                "Pathfinder should not pretend certainty.",
+                "It should narrow the task, expose uncertainty, and pause before risky action.",
+            ),
+            "story_mode_behavior": (
+                "[story mode] [design lens]",
+                "",
+                "Behavior spec",
+                "",
+                "What Pathfinder is",
+                "   ->",
+                "Security investigation assistant",
+                "",
+                "Who it is helping",
+                "   ->",
+                "SOC analyst / incident responder",
+                "",
+                "How it should speak",
+                "   ->",
+                "Concise, operational, evidence-first",
+                "",
+                "What it can do",
+                "   ->",
+                "Review detections",
+                "Inspect identities",
+                "Inspect endpoint context",
+                "Recommend next steps",
+                "Create tickets",
+                "",
+                "What it must not do",
+                "   ->",
+                "Pretend certainty",
+                "Reveal restricted data",
+                "Execute sensitive actions without approval",
+                "",
+                "How it should respond",
+                "   ->",
+                "Summary",
+                "Why it matters",
+                "Evidence",
+                "Recommendation",
+                "Approval needed: yes / no",
+            ),
+            "story_mode_memory": (
+                "[story mode] [design lens]",
+                "",
+                "Memory design",
+                "",
+                "Turn memory",
+                "   ->",
+                "What was just said",
+                "",
+                "Session memory",
+                "   ->",
+                "Current incident",
+                "Selected entities",
+                "Time range",
+                "Active filters",
+                "",
+                "User preference memory",
+                "   ->",
+                "Concise vs detailed output",
+                "Preferred evidence style",
+                "",
+                "Org memory",
+                "   ->",
+                "Playbooks",
+                "Escalation paths",
+                "Naming conventions",
+                "",
+                "Never save by default",
+                "   ->",
+                "Secrets",
+                "One-time tokens",
+                "Privileged credentials",
+                "Sensitive raw data",
+            ),
+            "story_mode_boundary": (
+                "[story mode] [design lens]",
+                "",
+                "Boundary and control",
+                "",
+                "Model helps with",
+                "   ->",
+                "Summarization",
+                "Prioritization",
+                "Hypothesis generation",
+                "Recommendation drafting",
+                "",
+                "Deterministic systems handle",
+                "   ->",
+                "Permission checks",
+                "Policy checks",
+                "Tool access",
+                "Audit logging",
+                "",
+                "Human owns",
+                "   ->",
+                "Approval for sensitive remediation",
+                "Final accountability",
+                "Escalation decisions",
+                "",
+                "If blocked",
+                "   ->",
+                "Explain why",
+                "Offer safe next steps",
+                "Do not silently fail",
+            ),
+            "story_mode_structure": (
+                "[story mode] [internal map]",
+                "",
+                "Full AI-native structure",
+                "",
+                "User intent",
+                "   ->",
+                "Intent classification",
+                "   ->",
+                "Context check",
+                "   +-- Missing context -> Ask follow-up",
+                "   +-- Enough context",
+                "         ->",
+                "Planner chooses steps + tools",
+                "         ->",
+                "Evidence gathering",
+                "         ->",
+                "Reasoning + summarization",
+                "         ->",
+                "Guardrails / policy / permission checks",
+                "   +-- Blocked -> Refuse + explain",
+                "   +-- Risky -> Pause for approval",
+                "   +-- Safe",
+                "         ->",
+                "Action or recommendation",
+                "         ->",
+                "Audit log",
+                "         ->",
+                "Memory update by retention rules",
+            ),
+            "story_mode_summary": (
+                "[story mode] [internal map]",
+                "",
+                "Demo story summary",
+                "",
+                "1. User starts with an ambiguous investigation request",
+                "2. Pathfinder asks for missing scope",
+                "3. User clarifies environment, timeframe, and goal",
+                "4. Pathfinder investigates within role permissions",
+                "5. Pathfinder explains what is known vs restricted",
+                "6. User asks a follow-up without repeating context",
+                "7. Pathfinder uses session memory",
+                "8. Pathfinder recommends a BeyondTrust-native containment path but stops at approval",
+                "9. Pathfinder prepares safe next steps",
+            ),
+        }
+        body = self._build_story_mode_body_text(content.get(scene_key, ("[story mode]", "", "Unavailable", "", "Return to the story menu.",)))
+        renderables: list[object] = []
+        renderables.append(body)
+        renderables.append(Text(""))
+        renderables.append(Text("Return", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines(scene_key))
+        return renderables
 
     def _build_home_action_renderables(self, action_key: str) -> list[object]:
         scene_renderables = self._build_scene_renderables(action_key)
@@ -4192,15 +6290,15 @@ class PathfinderPrototypeApp(App[None]):
 
     def _build_pending_approvals_status_text(self) -> Text:
         password_safe_waiting = sum(
-            1 for approval in PENDING_APPROVALS
+            1 for approval in self._all_pending_approvals()
             if approval.source == "Password Safe" and self._pending_approval_state(approval.key) == "waiting"
         )
         jit_waiting = sum(
-            1 for approval in PENDING_APPROVALS
+            1 for approval in self._all_pending_approvals()
             if approval.source == "Entitle" and self._pending_approval_state(approval.key) == "waiting"
         )
         production_linked = sum(
-            1 for approval in PENDING_APPROVALS
+            1 for approval in self._all_pending_approvals()
             if "prod" in approval.resource.lower() and self._pending_approval_state(approval.key) != "approved"
         )
         text = Text()
@@ -4234,7 +6332,7 @@ class PathfinderPrototypeApp(App[None]):
             self.detail_view_key == "pending_approvals"
             or (self.detail_view_key is not None and self.detail_view_key.startswith("approval_detail:"))
         )
-        for index, approval in enumerate(PENDING_APPROVALS):
+        for index, approval in enumerate(self._all_pending_approvals()):
             table.add_row(
                 Text(approval.source, style=f"bold {PALETTE['purple']}"),
                 Text(approval.request, style=PALETTE["text_main"]),
@@ -4247,7 +6345,8 @@ class PathfinderPrototypeApp(App[None]):
         return table
 
     def _build_pending_approvals_selection_text(self) -> Text:
-        approval = PENDING_APPROVALS[self._pending_approval_selected_index()]
+        approvals = self._all_pending_approvals()
+        approval = approvals[self._pending_approval_selected_index()]
         text = Text()
         text.append("Selected ", style=PALETTE["text_muted"])
         text.append("→ ", style=f"bold {PALETTE['teal']}")
@@ -4513,10 +6612,16 @@ class PathfinderPrototypeApp(App[None]):
             "warning": PALETTE["warn"],
             "risk": PALETTE["risk"],
             "medium": PALETTE["orange_pale"],
+            "info": PALETTE["blue_text"],
+            "accent": PALETTE["purple_text"],
+            "critical": PALETTE["risk"],
             "default": PALETTE["text_main"],
         }.get(level, PALETTE["text_main"])
 
     def _build_footer_hint(self) -> Text:
+        scene_hint = self._scene_footer_hint()
+        if scene_hint is not None:
+            return scene_hint
         message = FOOTER_HELP_MESSAGES[(self.chrome_tick // 12) % len(FOOTER_HELP_MESSAGES)]
         spinner = FOOTER_SPINNER_FRAMES[self.chrome_tick % len(FOOTER_SPINNER_FRAMES)]
         text = Text()
@@ -4739,6 +6844,48 @@ class PathfinderPrototypeApp(App[None]):
         return "Thinking..."
 
     def _detail_action_processing_message(self, action: InvestigationAction) -> str:
+        if action.key.startswith("story_mode_"):
+            if action.key == "story_mode_return":
+                return "Returning to story menu..."
+            return "Opening story poster..."
+        if action.key == "story_scope_default_recommend":
+            return "Resolving investigation scope..."
+        if action.key == "story_scope_default_triage":
+            return "Resolving investigation scope..."
+        if action.key == "story_customize_scope":
+            return "Preparing scope customization..."
+        if action.key == "story_show_role_limits":
+            return "Reviewing role limits..."
+        if action.key == "story_run_investigation":
+            return "Running investigation..."
+        if action.key == "story_show_memory_state":
+            return "Loading session memory..."
+        if action.key in {"story_assess_session_relatedness", "story_show_privilege_path"}:
+            return "Reviewing correlated access signals..."
+        if action.key in {"story_show_approval_evidence", "story_request_approval_proof"}:
+            return "Comparing approval evidence..."
+        if action.key in {"story_list_affected_assets", "story_show_top_asset_detail"}:
+            return "Reviewing affected assets..."
+        if action.key == "story_compare_access_change_options":
+            return "Comparing containment options..."
+        if action.key in {
+            "story_prepare_session_revoke_request",
+            "story_prepare_path_suspension_request",
+            "story_prepare_combined_response_packet",
+        }:
+            return "Preparing approval-ready response..."
+        if action.key in {"story_stage_incident_review", "story_open_incident_review"}:
+            return "Opening incident review..."
+        if action.key == "story_open_approval_queue":
+            return "Opening approval queue..."
+        if action.key == "story_export_summary":
+            return "Preparing summary export..."
+        if action.key in {"story_review_prepared_request", "story_hold_prepared_request"}:
+            return "Reviewing staged approval..."
+        if action.key in {"story_return_home", "story_return_home_keep_memory"}:
+            return "Returning home..."
+        if action.key.startswith("story_return_"):
+            return "Returning to the previous story step..."
         if action.key.startswith("select_graph:"):
             return "Opening selected graph..."
         if action.key == "return_to_graph_catalog":
@@ -4877,6 +7024,13 @@ class PathfinderPrototypeApp(App[None]):
             return
 
         current_module = self._active_module()
+        if self._story_mode_active() or self._story_scene_active():
+            if self._handle_story_detail_action(current_module.key, selected_action):
+                self._mark_updated()
+                self._render_current_module()
+                self.query_one("#command-input", Input).focus()
+                return
+
         entry_kind = "investigation_action"
         entry_action_key = selected_action.key
         entry_text = selected_action.result
@@ -4930,6 +7084,7 @@ class PathfinderPrototypeApp(App[None]):
             and current_pending_approval is not None
             and selected_action.key in {"approve_pending_request", "hold_pending_request", "return_to_pending_approvals"}
         ):
+            return_to_story_queue = self.detail_return_view_key == "story_approval_queue"
             if selected_action.key == "approve_pending_request":
                 self.pending_approval_state_by_key[current_pending_approval.key] = "approved"
                 entry_text = (
@@ -4946,13 +7101,13 @@ class PathfinderPrototypeApp(App[None]):
                 entry_text = "Returned focus to the pending approvals queue."
 
             self.detail_navigation_active = True
-            self.detail_view_key = "pending_approvals"
-            self.detail_action_index = self._pending_approval_index(current_pending_approval.key)
+            self.detail_view_key = "story_approval_queue" if return_to_story_queue else "pending_approvals"
+            self.detail_action_index = 0 if return_to_story_queue else self._pending_approval_index(current_pending_approval.key)
             self.detail_return_view_key = None
             self._set_verification_profile(current_module.key, None)
             self._remember_detail_state(current_module.key)
-            entry_kind = "message"
-            entry_action_key = ""
+            entry_kind = "story_scene" if return_to_story_queue else "message"
+            entry_action_key = "story_approval_queue" if return_to_story_queue else ""
         else:
             verification_profile = self._verification_profile_for_action(selected_action.key)
             if verification_profile is not None:

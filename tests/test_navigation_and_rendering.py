@@ -652,6 +652,74 @@ class NavigationAndRenderingTests(unittest.TestCase):
 
         self.assertEqual(app.user_role, "SOC Analyst II")
 
+    def test_story_prompt_initializes_ambiguity_scene(self) -> None:
+        app = PathfinderPrototypeApp()
+
+        app._start_story_from_prompt("pathfinder", "/investigate suspicious lateral movement tied to a service account")
+
+        self.assertEqual(app.detail_view_key, "story_ambiguity")
+        self.assertIsNotNone(app.story_context)
+        self.assertEqual(app.story_context.entity, "svc-backup-ops")
+
+    def test_story_followups_reuse_session_memory_for_assets_view(self) -> None:
+        app = PathfinderPrototypeApp()
+
+        app._start_story_from_prompt("pathfinder", "/investigate suspicious lateral movement tied to a service account")
+        applied = app._handle_story_followup_prompt(
+            "pathfinder",
+            "production, last 24 hours, include containment recommendations",
+        )
+        reused = app._handle_story_followup_prompt(
+            "pathfinder",
+            "Show me just the affected assets and group them by severity",
+        )
+
+        self.assertTrue(applied)
+        self.assertTrue(reused)
+        self.assertEqual(app.detail_view_key, "story_assets")
+        self.assertIsNotNone(app.story_context)
+        self.assertEqual(app.story_context.environment, "production")
+        self.assertEqual(app.story_context.time_range, "last 24 hours")
+
+    def test_story_combined_packet_stages_new_approval_requests(self) -> None:
+        app = PathfinderPrototypeApp()
+
+        app._start_story_from_prompt("pathfinder", "/investigate suspicious lateral movement tied to a service account")
+        app._apply_story_scope(
+            "pathfinder",
+            environment="production",
+            time_range="last 24 hours",
+            goal="triage + containment recommendation",
+            source_prompt="production, last 24 hours, include containment recommendations",
+        )
+        app._open_story_scene("pathfinder", "story_containment", "Containment options loaded.", source_prompt="containment")
+        selected_action = next(
+            action for action in app._active_story_detail_actions("story_containment")
+            if action.key == "story_prepare_combined_response_packet"
+        )
+
+        handled = app._handle_story_detail_action("pathfinder", selected_action)
+
+        self.assertTrue(handled)
+        self.assertEqual(app.detail_view_key, "story_handoff")
+        self.assertIn("story-pra-2214-terminate", [approval.key for approval in app.pending_approvals])
+        self.assertIn("story-aws-prod-admin-suspend", [approval.key for approval in app.pending_approvals])
+        self.assertEqual(app.story_context.prepared_approval_keys, ("story-pra-2214-terminate", "story-aws-prod-admin-suspend"))
+
+    def test_hidden_story_mode_restores_previous_view_on_close(self) -> None:
+        app = PathfinderPrototypeApp()
+        app.detail_navigation_active = True
+        app.detail_view_key = "story_findings"
+        app.detail_action_index = 2
+        app._remember_detail_state("pathfinder")
+
+        app._open_story_mode("pathfinder")
+        app._close_story_mode("pathfinder")
+
+        self.assertTrue(app.detail_navigation_active)
+        self.assertEqual(app.detail_view_key, "story_findings")
+        self.assertEqual(app.detail_action_index, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
