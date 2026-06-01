@@ -178,4 +178,11 @@ JSON example:
 - Data is intentionally mock/curated for UX prototyping.
 - Copy is inspired by public product descriptions and not an official BeyondTrust UI.
 
+Prompts:
+investigate suspicious lateral movement tied to a service account
 
+show me where privileged activity has been spiking this week across identity, policy, connector, and response signals
+
+break down today’s privileged access review queue by correlated risk, watch items, and stale approvals
+
+map the full reachable privilege path for svc-backup-ops into production admin access, including the live session and approval mismatch

@@ -31,13 +31,38 @@ MODEL_NAME_LABEL: Final[str] = "GPT-5.4"
 TOKEN_BUDGET: Final[int] = 200_000
 BASE_SESSION_TOKEN_ESTIMATE: Final[int] = 2400
 FOOTER_HELP_MESSAGES: Final[tuple[str, ...]] = (
-    "I can show you some features.",
-    "Need a quick tour? Ask me for the command list.",
-    "I can open apps, queues, and graph views.",
-    "Try /help if you want the shortcut rundown.",
-    "I can guide you through the current demo story.",
+    "I can show you some features, tiny fanfare not included.",
+    "Type /help for the map; I folded it very professionally.",
+    "Need the hot list again? /actions brings the drama back.",
+    "Try /story when the CLI needs its screenshot pose.",
+    "I can open apps, queues, graphs, and one suspiciously calm menu.",
+    "Shortcut rundown lives in /help, right next to the sensible shoes.",
+    "Ask for a heatmap and I will make the signal look delightfully griddy.",
+    "Pie charts are standing by for access-mix dessert duty.",
+    "Bar charts are warmed up and doing tiny stretches.",
+    "I can guide the demo story without stepping on the scary buttons.",
 )
-FOOTER_SPINNER_FRAMES: Final[tuple[str, ...]] = ("/", "-", "\\", "|")
+FOOTER_SPINNER_FRAMES: Final[tuple[str, ...]] = tuple(
+    chr(0x2800 + high_bit + group_offset + column_offset + frame_offset)
+    for high_bit in (0, 128)
+    for group_offset in range(0, 64, 8)
+    for column_offset in (0, 64)
+    for frame_offset in range(8)
+)
+PROCESSING_SPINNER_FRAMES: Final[tuple[str, ...]] = (
+    "⠉⠉",
+    "⠈⠙",
+    "⠀⠹",
+    "⠀⢸",
+    "⠀⣰",
+    "⢀⣠",
+    "⣀⣀",
+    "⣄⡀",
+    "⣆⠀",
+    "⡇⠀",
+    "⠏⠀",
+    "⠋⠁",
+)
 
 
 @dataclass(frozen=True)
@@ -221,6 +246,7 @@ class ConversationEntry:
     source_prompt: str = ""
     show_table: bool = False
     show_metrics: bool = False
+    visualization_kind: str | None = None
     kind: str = "message"
     context_key: str = ""
     action_key: str = ""
@@ -461,7 +487,7 @@ ATTENTION_ITEMS: Final[tuple[AttentionItem, ...]] = (
         "risk 91 | unusual privileged activity | active session overlap",
         "risk",
         "pathfinder",
-        "Start the AI-native investigation flow to scope production activity, compare approval evidence, and prepare a reviewer-facing response without executing the privileged change.",
+        "Start the investigation flow to scope production activity, compare approval evidence, and prepare a reviewer-facing response without executing the privileged change.",
     ),
     AttentionItem(
         "warning",
@@ -508,18 +534,6 @@ HOME_ACTIONS: Final[tuple[HomeAction, ...]] = (
         "Pending approvals",
         "Review production access approvals waiting in Password Safe and just-in-time workflows.",
         "password_safe",
-    ),
-    HomeAction(
-        "portfolio_cover",
-        "Portfolio cover",
-        "Open a screenshot-ready Pathfinder CLI title card inspired by the BeyondTrust login screen.",
-        "pathfinder",
-    ),
-    HomeAction(
-        "temp_sunset_scene",
-        "Temp sunset scene",
-        "Open a temporary PATHFINDER CLI loading scene with a block wordmark, layered offsets, gradient bar, and geometric accents.",
-        "pathfinder",
     ),
 )
 
@@ -1038,9 +1052,9 @@ CONTAINMENT_FOLLOWUP_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     ),
     InvestigationAction(
         key="cancel_return",
-        label="return",
-        summary="leave containment planning and return to the previous step",
-        result="Containment planning closed. Returned to the prior investigation step.",
+        label="view last step results",
+        summary="leave containment planning and inspect the prior step again before choosing another path",
+        result="Containment planning closed. The prior investigation step is available again.",
     ),
 )
 
@@ -1074,6 +1088,36 @@ VERIFICATION_FOLLOWUP_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
 
 TABLE_TOKENS: Final[tuple[str, ...]] = ("table", "compare", "list", "breakdown", "report")
 METRIC_TOKENS: Final[tuple[str, ...]] = ("metric", "metrics", "trend", "graph", "chart", "kpi", "health")
+HEATMAP_VISUALIZATION_PHRASES: Final[tuple[str, ...]] = (
+    "heatmap",
+    "heat map",
+    "activity map",
+    "hotspots",
+    "matrix",
+    "pattern over time",
+)
+PIE_VISUALIZATION_PHRASES: Final[tuple[str, ...]] = (
+    "pie",
+    "access mix",
+    "distribution",
+    "composition",
+    "share",
+    "mix",
+)
+BAR_VISUALIZATION_PHRASES: Final[tuple[str, ...]] = (
+    "horizontal bar",
+    "bar chart",
+    "bar",
+    "rank",
+    "compare",
+    "metrics",
+    "metric",
+    "trend",
+    "chart",
+    "graph",
+    "kpi",
+    "health",
+)
 AGENT_STATUS_CORE_TOKENS: Final[frozenset[str]] = frozenset({"agent", "agents"})
 AGENT_STATUS_HINT_TOKENS: Final[frozenset[str]] = frozenset(
     {
@@ -1111,16 +1155,16 @@ AGENT_STATUS_ROWS: Final[tuple[AgentStatusRow, ...]] = (
 )
 COMMAND_HELP: Final[tuple[tuple[str, str], ...]] = (
     ("/help", "Show this command reference."),
-    ("/app", "Show the app list."),
-    ("/app <name|number>", "Jump directly to an app."),
-    ("/module <name|number>", "Alias for /app."),
-    ("/agent", "Show the current agent roster."),
-    ("/agent add <name>", "Add a new agent with a disconnected connector."),
-    ("/agent remove <name>", "Remove an agent from the current roster."),
+    ("/app [name|number]", "Show the app list or jump directly to an app."),
+    ("/module [name|number]", "Alias for the app picker."),
+    ("/agent [add|remove] <name>", "Show or update the current agent roster."),
+    ("/story", "Open presentation-ready story scenes."),
+    ("/actions", "Display the actionable items again."),
+    ("/permission", "Show SOC Analyst II allow and not-allow boundaries."),
     ("/clear", "Clear conversation history across all apps."),
-    ("/reset", "Clear conversation history for the current app."),
+    ("/reset", "Reset the demo to a fresh logged-in dashboard."),
 )
-STORY_ENTRY_PROMPT: Final[str] = "/investigate suspicious lateral movement tied to a service account"
+STORY_ENTRY_PROMPT: Final[str] = "investigate suspicious lateral movement tied to a service account"
 STORY_CONTEXT_KEY: Final[str] = "svc-backup-ops-story"
 STORY_ROLE_CAPABILITIES: Final[tuple[str, ...]] = (
     "review detections",
@@ -1157,18 +1201,6 @@ STORY_AMBIGUITY_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
         summary="enter a custom environment, time range, or goal",
         result="Scope customization opened.",
     ),
-    InvestigationAction(
-        key="story_show_role_limits",
-        label="show role limits",
-        summary="review what this operator can inspect versus what stays blocked",
-        result="Role limits loaded for the current operator.",
-    ),
-    InvestigationAction(
-        key="story_return_home",
-        label="return",
-        summary="leave the story entry and go back to the home view",
-        result="Returned to the home view.",
-    ),
 )
 STORY_SCOPE_CONFIRM_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     InvestigationAction(
@@ -1176,24 +1208,6 @@ STORY_SCOPE_CONFIRM_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
         label="run investigation",
         summary="query the selected identity, session, approval, and entitlement signals",
         result="Investigation started for svc-backup-ops.",
-    ),
-    InvestigationAction(
-        key="story_adjust_scope",
-        label="adjust scope",
-        summary="change the environment, time range, or goal before running",
-        result="Returned to scope collection.",
-    ),
-    InvestigationAction(
-        key="story_show_memory_state",
-        label="show memory state",
-        summary="review the session-scoped investigation memory now in use",
-        result="Session memory state loaded.",
-    ),
-    InvestigationAction(
-        key="story_return_to_ambiguity",
-        label="return",
-        summary="return to the ambiguity handling screen",
-        result="Returned to ambiguity handling.",
     ),
 )
 STORY_SCOPE_CUSTOM_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
@@ -1204,31 +1218,25 @@ STORY_SCOPE_CUSTOM_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
         result="Scope resolved. Production, last 24 hours, triage plus containment recommendation.",
     ),
     InvestigationAction(
-        key="story_show_role_limits",
-        label="show role limits",
-        summary="review what the current analyst can and cannot do",
-        result="Role limits loaded for the current operator.",
-    ),
-    InvestigationAction(
         key="story_return_to_ambiguity",
-        label="return",
-        summary="return to the ambiguity handling screen",
+        label="view last step results",
+        summary="inspect the ambiguity handling step again before choosing another path",
         result="Returned to ambiguity handling.",
     ),
 )
 STORY_ROLE_LIMITS_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     InvestigationAction(
         key="story_return_to_ambiguity",
-        label="return",
-        summary="return to the ambiguity handling screen",
+        label="view last step results",
+        summary="inspect the ambiguity handling step again before choosing another path",
         result="Returned to ambiguity handling.",
     ),
 )
 STORY_MEMORY_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     InvestigationAction(
         key="story_return_to_scope",
-        label="return",
-        summary="return to the scope confirmation view",
+        label="view last step results",
+        summary="inspect the scope confirmation step again before choosing another path",
         result="Returned to scope confirmation.",
     ),
 )
@@ -1240,22 +1248,22 @@ STORY_FINDINGS_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
         result="Session relatedness analysis opened with explicit confidence and evidence gaps.",
     ),
     InvestigationAction(
-        key="story_show_privilege_path",
-        label="show privilege path",
-        summary="open the focused service-account path into production admin",
-        result="Privilege path loaded for svc-backup-ops.",
-    ),
-    InvestigationAction(
-        key="story_show_approval_evidence",
-        label="show approval evidence",
-        summary="compare PRA, Password Safe, and Entitle evidence for the current access",
-        result="Approval evidence comparison opened.",
+        key="story_show_supporting_evidence",
+        label="show supporting evidence",
+        summary="show the source, state, and reason behind the finding",
+        result="Supporting evidence opened.",
     ),
     InvestigationAction(
         key="story_list_affected_assets",
         label="list affected assets",
         summary="group the affected production assets by severity and overlap",
         result="Affected assets grouped by severity.",
+    ),
+    InvestigationAction(
+        key="story_show_privilege_path",
+        label="show privilege path",
+        summary="open the focused service-account path into production admin",
+        result="Privilege path loaded for svc-backup-ops.",
     ),
     InvestigationAction(
         key="story_open_incident_review",
@@ -1265,9 +1273,17 @@ STORY_FINDINGS_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     ),
     InvestigationAction(
         key="story_return_to_scope",
-        label="return",
-        summary="return to the planner preview and scoped context",
+        label="view last step results",
+        summary="inspect the planner preview and scoped context before choosing another path",
         result="Returned to scope confirmation.",
+    ),
+)
+STORY_SUPPORTING_EVIDENCE_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_return_to_findings",
+        label="view last step results",
+        summary="inspect the compact findings screen before choosing another path",
+        result="Returned to findings summary.",
     ),
 )
 STORY_SESSION_RELATEDNESS_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
@@ -1297,8 +1313,8 @@ STORY_SESSION_RELATEDNESS_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     ),
     InvestigationAction(
         key="story_return_to_findings",
-        label="return",
-        summary="return to the findings summary",
+        label="view last step results",
+        summary="inspect the findings summary before choosing another path",
         result="Returned to findings summary.",
     ),
 )
@@ -1317,8 +1333,8 @@ STORY_APPROVAL_EVIDENCE_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     ),
     InvestigationAction(
         key="story_return_to_findings",
-        label="return",
-        summary="return to the findings summary",
+        label="view last step results",
+        summary="inspect the findings summary before choosing another path",
         result="Returned to findings summary.",
     ),
 )
@@ -1343,8 +1359,8 @@ STORY_PRIVILEGE_PATH_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     ),
     InvestigationAction(
         key="story_return_to_findings",
-        label="return",
-        summary="return to the findings summary",
+        label="view last step results",
+        summary="inspect the findings summary before choosing another path",
         result="Returned to findings summary.",
     ),
 )
@@ -1375,8 +1391,8 @@ STORY_ASSETS_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     ),
     InvestigationAction(
         key="story_return_to_findings",
-        label="return",
-        summary="return to the findings summary",
+        label="view last step results",
+        summary="inspect the findings summary before choosing another path",
         result="Returned to findings summary.",
     ),
 )
@@ -1395,8 +1411,8 @@ STORY_ASSET_DETAIL_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     ),
     InvestigationAction(
         key="story_return_to_assets",
-        label="return",
-        summary="return to the affected asset grouping",
+        label="view last step results",
+        summary="inspect the affected asset grouping before choosing another path",
         result="Returned to the grouped asset view.",
     ),
 )
@@ -1427,8 +1443,8 @@ STORY_CONTAINMENT_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     ),
     InvestigationAction(
         key="story_return_to_findings",
-        label="return",
-        summary="return to the findings summary",
+        label="view last step results",
+        summary="inspect the findings summary before choosing another path",
         result="Returned to findings summary.",
     ),
 )
@@ -1447,8 +1463,8 @@ STORY_INCIDENT_REVIEW_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     ),
     InvestigationAction(
         key="story_return_to_findings",
-        label="return",
-        summary="return to the findings summary",
+        label="view last step results",
+        summary="inspect the findings summary before choosing another path",
         result="Returned to findings summary.",
     ),
 )
@@ -1479,7 +1495,7 @@ STORY_HANDOFF_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     ),
     InvestigationAction(
         key="story_return_home_keep_memory",
-        label="return home",
+        label="view last step results",
         summary="leave the handoff view but keep the active story in session memory",
         result="Returned home with the active investigation still in memory.",
     ),
@@ -1519,6 +1535,8 @@ STORY_EXPORT_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
     ),
 )
 STORY_MENU_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction("story_mode_portfolio_cover", "Portfolio cover", "Open the screenshot-ready Pathfinder CLI title card", "Portfolio cover opened."),
+    InvestigationAction("story_mode_temp_sunset_scene", "Temp sunset scene", "Open the temporary Pathfinder CLI loading scene", "Temp sunset scene opened."),
     InvestigationAction("story_mode_probabilistic", "Probabilistic UX thinking", "Open the probabilistic UX design lens", "Probabilistic UX thinking opened."),
     InvestigationAction("story_mode_behavior", "Behavior spec", "Open the behavior specification lens", "Behavior spec opened."),
     InvestigationAction("story_mode_memory", "Memory design", "Open the memory design lens", "Memory design opened."),
@@ -1532,6 +1550,111 @@ STORY_MENU_RETURN_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
         label="return to story menu",
         summary="go back to the hidden story presentation menu",
         result="Returned to story menu.",
+    ),
+)
+DEMO_ACTIVITY_HEATMAP_PROMPT: Final[str] = (
+    "show me where privileged activity has been spiking this week across identity, policy, connector, and response signals"
+)
+DEMO_QUEUE_BREAKDOWN_PROMPT: Final[str] = (
+    "break down today's privileged access review queue by correlated risk, watch items, and stale approvals"
+)
+DEMO_PRIVILEGE_GRAPH_PROMPT: Final[str] = (
+    "map the full reachable privilege path for svc-backup-ops into production admin access, including the live session and approval mismatch"
+)
+DEMO_STORY_SCENES: Final[frozenset[str]] = frozenset(
+    {
+        "story_demo_activity_heatmap",
+        "story_demo_queue_breakdown",
+        "story_demo_privilege_graph",
+    }
+)
+DEMO_ACTIVITY_HEATMAP_VALUES: Final[tuple[tuple[str, tuple[int, int, int, int, int]], ...]] = (
+    ("identity", (91, 30, 47, 88, 27)),
+    ("policy", (24, 41, 82, 93, 38)),
+    ("connector", (35, 76, 87, 32, 73)),
+    ("response", (70, 81, 26, 67, 78)),
+)
+DEMO_QUEUE_BREAKDOWN_VALUES: Final[tuple[tuple[str, int, str], ...]] = (
+    ("correlated", 46, "risk"),
+    ("watch", 31, "warn"),
+    ("stale", 23, "info"),
+)
+DEMO_ACTIVITY_HEATMAP_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_demo_review_policy_spike",
+        label="review Thursday policy spike",
+        summary="open a closer review of the strongest policy concentration",
+        result="Thursday policy spike queued for closer approval and entitlement review.",
+    ),
+    InvestigationAction(
+        key="story_demo_compare_connector_drift",
+        label="compare connector drift",
+        summary="compare connector-side changes against policy and identity spikes",
+        result="Connector drift comparison queued against the midweek policy spike.",
+    ),
+    InvestigationAction(
+        key="story_demo_open_approval_backlog",
+        label="open approval backlog",
+        summary="review stale or mismatched approvals behind the spike",
+        result="Approval queue opened.",
+    ),
+    InvestigationAction(
+        key="story_demo_return",
+        label="return",
+        summary="leave the demo response and return focus to the current terminal session",
+        result="Returned from the demo response.",
+    ),
+)
+DEMO_QUEUE_BREAKDOWN_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_demo_open_correlated_queue",
+        label="open correlated queue",
+        summary="start with items that have evidence across multiple BeyondTrust signals",
+        result="Correlated-risk queue queued for analyst review.",
+    ),
+    InvestigationAction(
+        key="story_demo_review_stale_approvals",
+        label="review stale approvals",
+        summary="inspect approval records that may need cleanup or revalidation",
+        result="Stale approval review queued.",
+    ),
+    InvestigationAction(
+        key="story_demo_inspect_watch_items",
+        label="inspect watch items",
+        summary="sample lower-urgency watch items after correlated risk is triaged",
+        result="Watch-item inspection queued.",
+    ),
+    InvestigationAction(
+        key="story_demo_return",
+        label="return",
+        summary="leave the demo response and return focus to the current terminal session",
+        result="Returned from the demo response.",
+    ),
+)
+DEMO_PRIVILEGE_GRAPH_ACTIONS: Final[tuple[InvestigationAction, ...]] = (
+    InvestigationAction(
+        key="story_assess_session_relatedness",
+        label="assess session relatedness",
+        summary="measure whether pra-2214 is likely tied to the same service-account activity",
+        result="Session relatedness analysis opened with explicit confidence and evidence gaps.",
+    ),
+    InvestigationAction(
+        key="story_show_approval_evidence",
+        label="compare approval evidence",
+        summary="compare the live session with Password Safe and entitlement artifacts",
+        result="Approval evidence comparison opened.",
+    ),
+    InvestigationAction(
+        key="story_compare_access_change_options",
+        label="prepare containment options",
+        summary="compare the safest BeyondTrust-native path-break options",
+        result="Containment options loaded.",
+    ),
+    InvestigationAction(
+        key="story_demo_return",
+        label="return",
+        summary="leave the demo response and return focus to the current terminal session",
+        result="Returned from the demo response.",
     ),
 )
 ACTIONABLE_ITEMS_TOKENS: Final[frozenset[str]] = frozenset({"actionable", "item", "items"})
@@ -1826,6 +1949,7 @@ class PathfinderPrototypeApp(App[None]):
         self.query_one("#command-input", Input).focus()
 
     def on_key(self, event: events.Key) -> None:
+        key = event.key.lower()
         if self._story_mode_active() and event.key in {"escape", "q"}:
             event.prevent_default()
             event.stop()
@@ -1842,10 +1966,37 @@ class PathfinderPrototypeApp(App[None]):
             self._render_current_module()
             return
 
-        if event.key != "enter" or self.processing:
+        if self.processing:
             return
 
         command_input = self.query_one("#command-input", Input)
+        if not command_input.value.strip():
+            if self._story_scene_active() and event.key in {"escape", "q"}:
+                event.prevent_default()
+                event.stop()
+                self._return_from_story_scene()
+                return
+
+            if event.key in {"j", "tab"} and self._has_navigation_context():
+                event.prevent_default()
+                event.stop()
+                self.action_picker_down()
+                return
+
+            if event.key == "k" and self._has_navigation_context():
+                event.prevent_default()
+                event.stop()
+                self.action_picker_up()
+                return
+
+            if self._activate_story_keyboard_shortcut(event.key):
+                event.prevent_default()
+                event.stop()
+                return
+
+        if event.key != "enter" or self.processing:
+            return
+
         if command_input.value.strip() or not self._has_navigation_context():
             return
 
@@ -1893,7 +2044,29 @@ class PathfinderPrototypeApp(App[None]):
                 self._render_current_module()
                 return
 
+            demo_scene_key = self._demo_story_scene_for_prompt(prompt)
+            if demo_scene_key is not None:
+                active_module = self._active_module()
+                self.processing_message = self._demo_prompt_processing_message(demo_scene_key)
+                self._append_history(
+                    active_module.key,
+                    ConversationEntry(role="user", text=prompt, source_prompt=prompt),
+                )
+                self._mark_updated()
+                self._render_current_module()
+                await self._animate_processing()
+                self._open_demo_story_scene(active_module.key, demo_scene_key, source_prompt=prompt)
+                self.processing = False
+                self.processing_message = ""
+                self._mark_updated()
+                self._render_current_module()
+                return
+
             if prompt.startswith("/"):
+                self.processing_message = self._utility_processing_message(prompt)
+                self._mark_updated()
+                self._render_current_module()
+                await self._animate_processing(cycles=18, delay=0.08)
                 self._handle_utility_command(prompt)
                 self.processing = False
                 self.processing_message = ""
@@ -1920,25 +2093,14 @@ class PathfinderPrototypeApp(App[None]):
                 return
 
             if self._matches_actionable_items_request(prompt):
-                self.home_navigation_active = True
-                self._clear_investigation_state(active_module.key)
-                self.home_selection_index = 0
-                self._append_history(
-                    active_module.key,
-                    ConversationEntry(
-                        role="assistant",
-                        text="Actionable items refreshed. Use Up/Down to select a case and Enter to open investigation.",
-                        source_prompt=prompt,
-                        kind="actionable_items",
-                    ),
-                )
+                self._refresh_actionable_items(active_module.key, source_prompt=prompt)
                 self.processing = False
                 self.processing_message = ""
                 self._mark_updated()
                 self._render_current_module()
                 return
 
-            summary, show_table, show_metrics = self._build_response(prompt, active_module)
+            summary, show_table, show_metrics, visualization_kind = self._build_response(prompt, active_module)
             self._append_history(
                 active_module.key,
                 ConversationEntry(
@@ -1947,6 +2109,7 @@ class PathfinderPrototypeApp(App[None]):
                     source_prompt=prompt,
                     show_table=show_table,
                     show_metrics=show_metrics,
+                    visualization_kind=visualization_kind,
                 ),
             )
 
@@ -2220,6 +2383,20 @@ class PathfinderPrototypeApp(App[None]):
                 return True
             return False
 
+        if action.key == "story_demo_return":
+            self._clear_detail_state(module_key)
+            self._clear_story_context(module_key)
+            self._append_story_message(module_key, action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_demo_open_approval_backlog":
+            self._open_story_scene(module_key, "story_approval_queue", action.result, source_prompt=action.label)
+            return True
+
+        if action.key.startswith("story_demo_"):
+            self._append_story_message(module_key, action.result, source_prompt=action.label, action_key=action.key)
+            return True
+
         if action.key == "story_scope_default_recommend":
             self._apply_story_scope(
                 module_key,
@@ -2277,6 +2454,10 @@ class PathfinderPrototypeApp(App[None]):
 
         if action.key == "story_assess_session_relatedness":
             self._open_story_scene(module_key, "story_session_relatedness", action.result, source_prompt=action.label)
+            return True
+
+        if action.key == "story_show_supporting_evidence":
+            self._open_story_scene(module_key, "story_supporting_evidence", action.result, source_prompt=action.label, return_view_key=current_scene)
             return True
 
         if action.key == "story_show_privilege_path":
@@ -2517,13 +2698,21 @@ class PathfinderPrototypeApp(App[None]):
             return
 
         if command_lower == "/reset":
-            self.histories[module.key].clear()
-            self.home_navigation_active = False
-            self.module_picker_active = False
-            self._clear_investigation_state(module.key)
+            self._reset_to_fresh_dashboard()
+            return
+
+        if command_lower == "/actions":
+            self._refresh_actionable_items(module.key, source_prompt=command)
+            return
+
+        if command_lower == "/permission":
             self._append_history(
                 module.key,
-                ConversationEntry(role="assistant", text=f"Cleared conversation history for {module.label}."),
+                ConversationEntry(
+                    role="assistant",
+                    text="SOC Analyst II permissions",
+                    kind="permission",
+                ),
             )
             return
 
@@ -2649,6 +2838,27 @@ class PathfinderPrototypeApp(App[None]):
         tokens = set(re.findall(r"[a-z0-9]+", prompt.lower()))
         return "actionable" in tokens and bool(tokens & {"item", "items"})
 
+    def _attention_item_for_subject(self, subject: str) -> AttentionItem | None:
+        for item in ATTENTION_ITEMS:
+            if item.subject == subject:
+                return item
+        return None
+
+    def _refresh_actionable_items(self, module_key: str, *, source_prompt: str) -> None:
+        self.home_navigation_active = True
+        self.module_picker_active = False
+        self.home_selection_index = 0
+        self._clear_investigation_state(module_key)
+        self._append_history(
+            module_key,
+            ConversationEntry(
+                role="assistant",
+                text="Actionable items refreshed. Use Up/Down to select a case and Enter to open investigation.",
+                source_prompt=source_prompt,
+                kind="actionable_items",
+            ),
+        )
+
     def _investigation_case_for_attention(self, attention: AttentionItem) -> InvestigationCase | None:
         return INVESTIGATION_CASES.get(attention.subject)
 
@@ -2686,6 +2896,8 @@ class PathfinderPrototypeApp(App[None]):
             return STORY_MEMORY_ACTIONS
         if self.detail_view_key == "story_findings":
             return STORY_FINDINGS_ACTIONS
+        if self.detail_view_key == "story_supporting_evidence":
+            return STORY_SUPPORTING_EVIDENCE_ACTIONS
         if self.detail_view_key == "story_session_relatedness":
             return STORY_SESSION_RELATEDNESS_ACTIONS
         if self.detail_view_key == "story_approval_evidence":
@@ -2706,6 +2918,12 @@ class PathfinderPrototypeApp(App[None]):
             return STORY_APPROVAL_QUEUE_ACTIONS
         if self.detail_view_key == "story_export":
             return STORY_EXPORT_ACTIONS
+        if self.detail_view_key == "story_demo_activity_heatmap":
+            return DEMO_ACTIVITY_HEATMAP_ACTIONS
+        if self.detail_view_key == "story_demo_queue_breakdown":
+            return DEMO_QUEUE_BREAKDOWN_ACTIONS
+        if self.detail_view_key == "story_demo_privilege_graph":
+            return DEMO_PRIVILEGE_GRAPH_ACTIONS
         if self.detail_view_key == "story_menu":
             return STORY_MENU_ACTIONS
         if self.detail_view_key and self.detail_view_key.startswith("story_mode_"):
@@ -2744,6 +2962,8 @@ class PathfinderPrototypeApp(App[None]):
             return STORY_MEMORY_ACTIONS
         if scene_key == "story_findings":
             return STORY_FINDINGS_ACTIONS
+        if scene_key == "story_supporting_evidence":
+            return STORY_SUPPORTING_EVIDENCE_ACTIONS
         if scene_key == "story_session_relatedness":
             return STORY_SESSION_RELATEDNESS_ACTIONS
         if scene_key == "story_approval_evidence":
@@ -2764,6 +2984,12 @@ class PathfinderPrototypeApp(App[None]):
             return STORY_APPROVAL_QUEUE_ACTIONS
         if scene_key == "story_export":
             return STORY_EXPORT_ACTIONS
+        if scene_key == "story_demo_activity_heatmap":
+            return DEMO_ACTIVITY_HEATMAP_ACTIONS
+        if scene_key == "story_demo_queue_breakdown":
+            return DEMO_QUEUE_BREAKDOWN_ACTIONS
+        if scene_key == "story_demo_privilege_graph":
+            return DEMO_PRIVILEGE_GRAPH_ACTIONS
         if scene_key == "story_menu":
             return STORY_MENU_ACTIONS
         if scene_key and scene_key.startswith("story_mode_"):
@@ -2786,12 +3012,7 @@ class PathfinderPrototypeApp(App[None]):
 
     def _detail_action_label(self, action: InvestigationAction) -> str:
         if self.detail_view_key == "containment" and action.key == "cancel_return":
-            return {
-                "privilege_path": "return to privilege path",
-                "target_activity": "return to activity review",
-                "live_session": "return to session summary",
-                "summary": "return to case summary",
-            }.get(self.detail_return_view_key, "return")
+            return "view last step results"
         return action.label
 
     def _detail_action_summary(self, action: InvestigationAction) -> str:
@@ -2872,6 +3093,37 @@ class PathfinderPrototypeApp(App[None]):
 
     def _append_history(self, module_key: str, entry: ConversationEntry) -> None:
         self.histories[module_key].append(entry)
+
+    def _reset_to_fresh_dashboard(self) -> None:
+        self.user_role = "SOC Analyst II"
+        self.agent_status_rows = list(AGENT_STATUS_ROWS)
+        self.pending_approvals = list(PENDING_APPROVALS)
+        self.module_index = 0
+        self.module_picker_active = False
+        self.module_picker_index = 0
+        self.home_navigation_active = False
+        self.home_selection_index = self._home_selection_count() - 1
+        self.investigation_navigation_active = False
+        self.investigation_case_key = None
+        self.investigation_action_index = 0
+        self.detail_navigation_active = False
+        self.detail_view_key = None
+        self.detail_action_index = 0
+        self.detail_return_view_key = None
+        self.verification_profile_key = None
+        self.investigation_state_by_module = {module.key: None for module in MODULES}
+        self.detail_state_by_module = {module.key: None for module in MODULES}
+        self.verification_profile_by_module = {module.key: None for module in MODULES}
+        self.pending_approval_state_by_key = {approval.key: "waiting" for approval in PENDING_APPROVALS}
+        self.story_context_by_module = {module.key: None for module in MODULES}
+        self.story_mode_return_state_by_module = {module.key: None for module in MODULES}
+        self.story_context = None
+        self.processing = False
+        self.processing_message = ""
+        self.chrome_tick = 0
+        self.last_update_at = time.perf_counter()
+        self.histories = {module.key: [] for module in MODULES}
+        self._initial_main_log_render_pending = True
 
     def _clear_investigation_state(self, module_key: str) -> None:
         self.investigation_state_by_module[module_key] = None
@@ -2961,6 +3213,7 @@ class PathfinderPrototypeApp(App[None]):
             "story_role_limits",
             "story_memory_state",
             "story_findings",
+            "story_supporting_evidence",
             "story_session_relatedness",
             "story_approval_evidence",
             "story_privilege_path",
@@ -2971,6 +3224,9 @@ class PathfinderPrototypeApp(App[None]):
             "story_handoff",
             "story_approval_queue",
             "story_export",
+            "story_demo_activity_heatmap",
+            "story_demo_queue_breakdown",
+            "story_demo_privilege_graph",
             "story_menu",
         } or detail_view_key.startswith("story_mode_"):
             detail_actions = self._active_story_detail_actions(detail_view_key)
@@ -3094,8 +3350,13 @@ class PathfinderPrototypeApp(App[None]):
 
     def _render_current_module(self) -> None:
         log = self.query_one("#main-log", RichLog)
+        force_session_relatedness_top = self.detail_view_key == "story_session_relatedness" and not self.processing
         log.auto_scroll = not self._initial_main_log_render_pending
+        if force_session_relatedness_top:
+            log.auto_scroll = False
         log.clear()
+        if force_session_relatedness_top:
+            log.set_scroll(0, 0)
 
         scene_renderables = self._build_scene_renderables(self.detail_view_key)
         if scene_renderables is not None:
@@ -3121,13 +3382,15 @@ class PathfinderPrototypeApp(App[None]):
             self._refresh_chrome()
             return
 
+        active_module = self._active_module()
         log.write(Text("Overview", style=f"bold {PALETTE['orange_soft']}"))
         log.write("")
         log.write(self._build_overview_table())
-        log.write("")
-        for renderable in self._build_module_dashboard_renderables(self._active_module()):
-            log.write(renderable)
+        if active_module.key != "pathfinder":
             log.write("")
+            for renderable in self._build_module_dashboard_renderables(active_module):
+                log.write(renderable)
+                log.write("")
         log.write(Text(self._separator(), style=PALETTE["line"]))
         log.write("")
 
@@ -3139,12 +3402,7 @@ class PathfinderPrototypeApp(App[None]):
             log.write(detail)
             log.write("")
 
-        log.write(Text("Analyst options", style=f"bold {PALETTE['orange_soft']}"))
-        log.write("")
-        for index, action in enumerate(HOME_ACTIONS, start=1):
-            log.write(self._build_home_action_line(index, action, selected=self._is_action_selected(index - 1)))
-
-        active_history = self.histories[self._active_module().key]
+        active_history = self.histories[active_module.key]
         if active_history or self.processing:
             log.write("")
             log.write(Text(self._separator(), style=PALETTE["line"]))
@@ -3675,11 +3933,32 @@ class PathfinderPrototypeApp(App[None]):
 
         detail = Text()
         detail.append("  ", style=PALETTE["text_main"])
-        detail.append(item.summary, style=PALETTE["text_muted"])
+        detail.append_text(self._build_attention_summary_text(item))
         if selected:
             headline.stylize(f"on {PALETTE['bg_soft']}")
             detail.stylize(f"on {PALETTE['bg_soft']}")
         return headline, detail
+
+    def _build_attention_summary_text(self, item: AttentionItem) -> Text:
+        text = Text()
+        if item.subject == "svc-backup-ops":
+            text.append("risk ", style=PALETTE["text_muted"])
+            text.append("91", style=self._status_style("risk"))
+            text.append(" | ", style=PALETTE["line"])
+            text.append("[x_x] ", style=self._status_style("risk"))
+            text.append("unusual privileged activity", style=PALETTE["text_muted"])
+            text.append(" | ", style=PALETTE["line"])
+            text.append("][ ", style=f"bold {PALETTE['orange_pale']}")
+            text.append("active session overlap", style=PALETTE["text_muted"])
+            return text
+
+        if item.severity == "warning":
+            text.append("/!\\ ", style=self._status_style("warn"))
+            text.append(item.summary, style=PALETTE["text_muted"])
+            return text
+
+        text.append(item.summary, style=PALETTE["text_muted"])
+        return text
 
     def _build_home_action_line(self, index: int, action: HomeAction, selected: bool = False) -> Text:
         text = Text()
@@ -3747,6 +4026,16 @@ class PathfinderPrototypeApp(App[None]):
             renderables.append(self._plain_text(entry.text))
             renderables.append(Text(""))
             renderables.extend(self._build_actionable_items_renderables())
+        elif entry.kind == "attention_detail":
+            attention = self._attention_item_for_subject(entry.context_key)
+            if attention is not None:
+                renderables.append(self._build_attention_response(attention))
+            else:
+                renderables.append(self._plain_text(entry.text))
+        elif entry.kind == "permission":
+            renderables.append(self._plain_text(entry.text))
+            renderables.append(Text(""))
+            renderables.append(self._build_permission_table())
         elif entry.kind == "investigation":
             investigation_case = INVESTIGATION_CASES.get(entry.context_key)
             if investigation_case is not None:
@@ -3782,6 +4071,10 @@ class PathfinderPrototypeApp(App[None]):
             renderables.append(Text(""))
             renderables.append(self._build_response_metrics(entry.source_prompt or entry.text, module))
 
+        if entry.visualization_kind is not None:
+            renderables.append(Text(""))
+            renderables.append(self._build_response_visualization(entry.visualization_kind, module))
+
         return renderables
 
     def _build_help_text(self) -> Text:
@@ -3816,7 +4109,7 @@ class PathfinderPrototypeApp(App[None]):
         renderables.append(Text(""))
         renderables.append(self._build_investigation_decision_strip(investigation_case))
         renderables.append(Text(""))
-        renderables.append(self._build_section_block("AI assessment", self._build_investigation_assessment_text(investigation_case)))
+        renderables.append(self._build_section_block("Assessment", self._build_investigation_assessment_text(investigation_case)))
         renderables.append(Text(""))
         renderables.append(self._build_section_block("Reachable path", self._build_investigation_path_text(investigation_case)))
         renderables.append(Text(""))
@@ -3883,7 +4176,39 @@ class PathfinderPrototypeApp(App[None]):
 
     def _story_prompt_matches_entry(self, prompt: str) -> bool:
         normalized = " ".join(prompt.strip().lower().split())
+        if normalized.startswith("/"):
+            normalized = normalized[1:].strip()
         return normalized == STORY_ENTRY_PROMPT
+
+    def _normalize_natural_language_prompt(self, prompt: str) -> str:
+        normalized = prompt.replace("\u2019", "'").replace("\u2018", "'")
+        normalized = normalized.replace("\u201c", '"').replace("\u201d", '"')
+        return " ".join(normalized.strip().lower().split())
+
+    def _demo_story_scene_for_prompt(self, prompt: str) -> str | None:
+        normalized = self._normalize_natural_language_prompt(prompt)
+        if normalized == DEMO_ACTIVITY_HEATMAP_PROMPT:
+            return "story_demo_activity_heatmap"
+        if normalized == DEMO_QUEUE_BREAKDOWN_PROMPT:
+            return "story_demo_queue_breakdown"
+        if normalized == DEMO_PRIVILEGE_GRAPH_PROMPT:
+            return "story_demo_privilege_graph"
+        return None
+
+    def _demo_prompt_processing_message(self, scene_key: str) -> str:
+        return {
+            "story_demo_activity_heatmap": "Mapping privileged activity spikes...",
+            "story_demo_queue_breakdown": "Breaking down the access review queue...",
+            "story_demo_privilege_graph": "Mapping reachable privilege path...",
+        }.get(scene_key, "Building demo response...")
+
+    def _open_demo_story_scene(self, module_key: str, scene_key: str, *, source_prompt: str) -> None:
+        self._open_story_scene(
+            module_key,
+            scene_key,
+            self._story_scene_result_text(scene_key),
+            source_prompt=source_prompt,
+        )
 
     def _story_context_active(self) -> bool:
         return self.story_context is not None
@@ -3946,6 +4271,49 @@ class PathfinderPrototypeApp(App[None]):
         self._remember_detail_state(module_key)
         self._set_verification_profile(module_key, saved_state.verification_profile_key)
 
+    def _return_from_story_scene(self) -> None:
+        module_key = self._active_module().key
+        if self.detail_view_key in DEMO_STORY_SCENES:
+            self._clear_detail_state(module_key)
+            self._clear_story_context(module_key)
+            self._mark_updated()
+            self._render_current_module()
+            return
+
+        if self.detail_view_key == "story_findings":
+            target_scene = self.detail_return_view_key or "story_scope_confirm"
+        else:
+            target_scene = self.detail_return_view_key or "story_findings"
+
+        self.detail_navigation_active = True
+        self.detail_view_key = target_scene
+        self.detail_action_index = 0
+        self.detail_return_view_key = None
+        self._remember_detail_state(module_key)
+        self._mark_updated()
+        self._render_current_module()
+
+    def _activate_story_keyboard_shortcut(self, key: str) -> bool:
+        if self.detail_view_key != "story_findings" or not self.detail_navigation_active:
+            return False
+
+        shortcut_to_action = {
+            "e": "story_show_supporting_evidence",
+            "p": "story_show_privilege_path",
+            "a": "story_list_affected_assets",
+        }
+        action_key = shortcut_to_action.get(key)
+        if action_key is None:
+            return False
+
+        for index, action in enumerate(self._active_story_detail_actions("story_findings")):
+            if action.key == action_key:
+                self.detail_action_index = index
+                self._remember_detail_state(self._active_module().key)
+                self.action_activate_selection()
+                return True
+        return False
+
     def _story_scene_name(self, scene_key: str) -> str:
         return {
             "story_ambiguity": "ambiguity handling",
@@ -3953,7 +4321,8 @@ class PathfinderPrototypeApp(App[None]):
             "story_scope_custom": "scope customization",
             "story_role_limits": "role limits",
             "story_memory_state": "memory state",
-            "story_findings": "findings summary",
+            "story_findings": "findings",
+            "story_supporting_evidence": "supporting evidence",
             "story_session_relatedness": "session relatedness",
             "story_approval_evidence": "approval evidence",
             "story_privilege_path": "privilege path",
@@ -3964,6 +4333,9 @@ class PathfinderPrototypeApp(App[None]):
             "story_handoff": "controlled handoff",
             "story_approval_queue": "approval queue",
             "story_export": "summary export",
+            "story_demo_activity_heatmap": "activity heat map",
+            "story_demo_queue_breakdown": "privileged access review queue",
+            "story_demo_privilege_graph": "reachable privilege path",
         }.get(scene_key, "story view")
 
     def _story_scene_result_text(self, scene_key: str, *, returned: bool = False) -> str:
@@ -4240,6 +4612,8 @@ class PathfinderPrototypeApp(App[None]):
             return self._build_story_memory_state_renderables()
         if action_key == "story_findings":
             return self._build_story_findings_renderables()
+        if action_key == "story_supporting_evidence":
+            return self._build_story_supporting_evidence_renderables()
         if action_key == "story_session_relatedness":
             return self._build_story_session_relatedness_renderables()
         if action_key == "story_approval_evidence":
@@ -4260,13 +4634,20 @@ class PathfinderPrototypeApp(App[None]):
             return self._build_story_approval_queue_renderables()
         if action_key == "story_export":
             return self._build_story_export_renderables()
+        if action_key == "story_demo_activity_heatmap":
+            return self._build_demo_activity_heatmap_renderables()
+        if action_key == "story_demo_queue_breakdown":
+            return self._build_demo_queue_breakdown_renderables()
+        if action_key == "story_demo_privilege_graph":
+            return self._build_demo_privilege_graph_renderables()
         return []
 
     def _build_story_header_text(self, title: str, subtitle: str) -> Text:
         text = Text()
         text.append(title, style=f"bold {PALETTE['orange_soft']}")
-        text.append("\n", style=PALETTE["text_main"])
-        text.append(subtitle, style=PALETTE["text_muted"])
+        if subtitle:
+            text.append("\n", style=PALETTE["text_main"])
+            text.append(subtitle, style=PALETTE["text_muted"])
         return text
 
     def _build_story_state_line(self, parts: tuple[tuple[str, str], ...]) -> Text:
@@ -4335,14 +4716,24 @@ class PathfinderPrototypeApp(App[None]):
                 text.append("\n", style=PALETTE["text_main"])
         return Panel(text, title="Missing context", box=TABLE_BOX, expand=True, border_style=PALETTE["line"], padding=(0, 1))
 
+    def _build_story_scope_needed_text(self) -> Text:
+        text = Text()
+        text.append("I don't have enough scope yet to recommend a production-safe next move. ", style=PALETTE["text_main"])
+        text.append("Environment", style=f"bold {PALETTE['orange_primary']}")
+        text.append(", ", style=PALETTE["text_main"])
+        text.append("time range", style=f"bold {PALETTE['orange_primary']}")
+        text.append(", and ", style=PALETTE["text_main"])
+        text.append("goal", style=f"bold {PALETTE['orange_primary']}")
+        text.append(" are still needed.", style=PALETTE["text_main"])
+        return text
+
     def _build_story_planner_text(self) -> Text:
         steps = (
-            "classify task",
-            "inspect identity risk",
-            "inspect live privileged session",
-            "compare approval / entitlement context",
-            "summarize findings",
-            "recommend safe next steps",
+            "Lock the scoped entity, environment, and time window so the investigation stays bounded.",
+            "Inspect identity risk, recent behavior, and reachable privilege paths for the service account.",
+            "Check live privileged session context and look for overlap with the scoped activity.",
+            "Compare approval, Password Safe, and entitlement evidence before recommending a response.",
+            "Summarize what is known, what is restricted, and which reviewer-safe action should happen next.",
         )
         text = Text()
         for index, step in enumerate(steps, start=1):
@@ -4356,7 +4747,7 @@ class PathfinderPrototypeApp(App[None]):
         text = Text()
         sources = ("Identity Security Insights", "Privileged Remote Access", "Password Safe", "Entitle")
         for index, source in enumerate(sources):
-            text.append("- ", style=f"bold {PALETTE['orange_pale']}")
+            text.append("[api] ", style=f"bold {PALETTE['teal']}")
             text.append(source, style=PALETTE["text_main"])
             if index < len(sources) - 1:
                 text.append("\n", style=PALETTE["text_main"])
@@ -4370,6 +4761,26 @@ class PathfinderPrototypeApp(App[None]):
             if index < len(STORY_ROLE_RESTRICTIONS) - 1:
                 text.append("\n", style=PALETTE["text_main"])
         return text
+
+    def _build_permission_table(self) -> Table:
+        table = Table(
+            title="SOC Analyst II permissions",
+            box=TABLE_BOX,
+            expand=True,
+            show_lines=True,
+            border_style=PALETTE["line"],
+            header_style=f"bold {PALETTE['orange_soft']}",
+            padding=(0, 1),
+            pad_edge=False,
+        )
+        table.add_column("Area / action", min_width=44)
+        table.add_column("Permission", min_width=14)
+
+        for item in STORY_ROLE_CAPABILITIES:
+            table.add_row(Text(item, style=PALETTE["text_main"]), self._build_badge("allow", "ok"))
+        for item in STORY_ROLE_RESTRICTIONS:
+            table.add_row(Text(item, style=PALETTE["text_main"]), self._build_badge("not allow", "risk"))
+        return table
 
     def _build_story_source_alignment_table(self) -> Table:
         table = Table(
@@ -4407,6 +4818,24 @@ class PathfinderPrototypeApp(App[None]):
         self._append_privilege_path_line(text, "          +-- ", "SCOPE", "info", "production", PALETTE["text_main"])
         return text
 
+    def _build_story_compact_path_text(self) -> Text:
+        context = self._story_current_context()
+        text = Text()
+        text.append("[id] ", style=f"bold {PALETTE['purple_text']}")
+        text.append(context.entity, style=f"bold {PALETTE['text_main']}")
+        text.append("\n   |\n", style=PALETTE["line"])
+        text.append("   +-[grp] ", style=PALETTE["line"])
+        text.append("grp-cloud-admins", style=f"bold {PALETTE['violet']}")
+        text.append("\n       |\n", style=PALETTE["line"])
+        text.append("       +-[role] ", style=PALETTE["line"])
+        text.append("aws-prod-admin", style=self._status_style("risk"))
+        text.append("\n          +-[session] ", style=PALETTE["line"])
+        text.append(context.active_session, style=f"bold {PALETTE['teal']}")
+        text.append("  active", style=self._status_style("warn"))
+        text.append("\n          +-[scope] ", style=PALETTE["line"])
+        text.append("production", style=f"bold {PALETTE['orange_pale']}")
+        return text
+
     def _build_story_timeline_text(self) -> Text:
         text = Text()
         rows = (
@@ -4423,6 +4852,57 @@ class PathfinderPrototypeApp(App[None]):
                 text.append("\n", style=PALETTE["text_main"])
                 text.append("       |", style=PALETTE["text_muted"])
                 text.append("\n", style=PALETTE["text_main"])
+        return text
+
+    def _build_story_session_timeline_text(self) -> Text:
+        text = Text()
+        rows = (
+            ("19:32", "OPEN", "session opened"),
+            ("19:34", "SCOPE", "admin scope confirmed"),
+            ("19:36", "REVIEW", "backup policy viewed"),
+            ("19:37", "FLAG", "credential-related action attempted"),
+            ("19:38", "READ", "production config read"),
+        )
+        badge_tones = {
+            "OPEN": "info",
+            "SCOPE": "accent",
+            "REVIEW": "warn",
+            "FLAG": "risk",
+            "READ": "teal",
+        }
+        for index, (time_label, tag, detail) in enumerate(rows):
+            text.append("o", style=PALETTE["line"])
+            text.append(" ", style=PALETTE["text_main"])
+            text.append(f"[{tag}]", style=self._status_style(badge_tones[tag]))
+            text.append(" ", style=PALETTE["text_main"])
+            text.append(time_label, style=f"bold {PALETTE['text_main']}")
+            text.append("  ", style=PALETTE["text_main"])
+            text.append(detail, style=f"bold {PALETTE['orange_pale']}" if tag == "FLAG" else PALETTE["text_main"])
+            if index < len(rows) - 1:
+                text.append("\n", style=PALETTE["text_main"])
+                text.append("|", style=PALETTE["line"])
+                text.append("\n", style=PALETTE["text_main"])
+        return text
+
+    def _build_story_session_score_text(self, rows: tuple[tuple[str, int, str], ...]) -> Text:
+        text = Text()
+        for index, (label, value, suffix) in enumerate(rows):
+            text.append(label, style=PALETTE["text_muted"])
+            text.append("\n", style=PALETTE["text_main"])
+            text.append_text(self._bar(value, width=10))
+            text.append(" ", style=PALETTE["text_main"])
+            text.append(suffix, style=PALETTE["text_main"])
+            if index < len(rows) - 1:
+                text.append("\n\n", style=PALETTE["text_main"])
+        return text
+
+    def _build_story_session_metric_text(self, label: str, value: int, suffix: str) -> Text:
+        text = Text()
+        text.append(label, style=PALETTE["text_muted"])
+        text.append("\n", style=PALETTE["text_main"])
+        text.append_text(self._bar(value, width=10))
+        text.append(" ", style=PALETTE["text_main"])
+        text.append(suffix, style=PALETTE["text_main"])
         return text
 
     def _build_story_signal_bars_text(self, rows: tuple[tuple[str, int, str], ...]) -> Text:
@@ -4557,17 +5037,9 @@ class PathfinderPrototypeApp(App[None]):
 
     def _build_story_ambiguity_renderables(self) -> list[object]:
         renderables: list[object] = []
-        renderables.append(self._build_story_header_text("Ambiguity handling", "Intent received but scope is still missing"))
+        renderables.append(self._build_story_header_text("Scope needed", "Tell me the minimum scope and I can continue"))
         renderables.append(Text(""))
-        renderables.append(self._build_story_state_line((("active investigation", "info"), ("role-aware", "ok"))))
-        renderables.append(Text(""))
-        renderables.append(self._build_section_block("Intent line", Text("Investigate suspicious lateral movement tied to a service account.", style=PALETTE["text_main"])))
-        renderables.append(Text(""))
-        renderables.append(self._build_story_ambiguity_slots_panel())
-        renderables.append(Text(""))
-        renderables.append(self._build_section_block("Current role", Text("SOC Analyst II can investigate, compare approvals, and prepare requests, but cannot execute high-risk privileged changes.", style=PALETTE["text_main"])))
-        renderables.append(Text(""))
-        renderables.append(self._build_section_block("Why I'm asking", Text("Pathfinder does not have enough scope yet to recommend a production-safe next move. Environment, time range, and goal are still required.", style=PALETTE["text_muted"])))
+        renderables.append(self._build_story_scope_needed_text())
         renderables.append(Text(""))
         renderables.append(Text("Select next", style=f"bold {PALETTE['orange_soft']}"))
         renderables.extend(self._build_story_followup_lines("story_ambiguity"))
@@ -4575,17 +5047,13 @@ class PathfinderPrototypeApp(App[None]):
 
     def _build_story_scope_confirm_renderables(self) -> list[object]:
         renderables: list[object] = []
-        renderables.append(self._build_story_header_text("Scope confirmation", "Session memory is now active for the current investigation"))
-        renderables.append(Text(""))
-        renderables.append(self._build_story_state_line((("active investigation", "info"), ("session memory active", "ok"), ("role-aware", "ok"))))
-        renderables.append(Text(""))
         renderables.append(self._build_story_memory_panel())
         renderables.append(Text(""))
         renderables.append(self._build_section_block("Planner", self._build_story_planner_text()))
         renderables.append(Text(""))
         renderables.append(self._build_section_block("Data sources to query", self._build_story_sources_text()))
         renderables.append(Text(""))
-        renderables.append(Text("Continue", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.append(Text("Select next", style=f"bold {PALETTE['orange_soft']}"))
         renderables.extend(self._build_story_followup_lines("story_scope_confirm"))
         return renderables
 
@@ -4635,46 +5103,90 @@ class PathfinderPrototypeApp(App[None]):
 
     def _build_story_findings_renderables(self) -> list[object]:
         renderables: list[object] = []
-        renderables.append(self._build_story_header_text("Findings summary", "svc-backup-ops now anchors the active investigation"))
+        renderables.append(self._build_story_header_text("Investigation: svc-backup-ops", ""))
         renderables.append(Text(""))
-        renderables.append(self._build_story_state_line((("active investigation", "info"), ("role-aware", "ok"), ("restricted", "warn"), ("session memory active", "ok"))))
+        renderables.append(self._build_section_block("Key signals", Text("risk 91 | active PRA session | reachable admin path | approval evidence missing", style=PALETTE["text_main"])))
         renderables.append(Text(""))
-        renderables.append(self._build_section_block("Decision strip", Text("risk 91 | active PRA session pra-2214 | reachable admin path | approval evidence missing", style=PALETTE["text_main"])))
-        renderables.append(Text(""))
-        renderables.append(self._build_section_block("AI assessment", Text("Pathfinder linked svc-backup-ops to a reachable production admin path, an active privileged session, and an approval artifact that does not yet line up cleanly. The pattern is notable, but some evidence is still restricted or missing.", style=PALETTE["text_main"])))
+        renderables.append(self._build_section_block("Assessment", Text("Pathfinder linked svc-backup-ops to a reachable production admin path, an active privileged session, and approval evidence that does not line up cleanly. The pattern is notable, but not fully confirmed.", style=PALETTE["text_main"])))
         renderables.append(Text(""))
         renderables.append(self._build_section_heading("Focused path"))
-        renderables.append(self._build_emphasis_panel(self._build_story_privilege_graph_text()))
+        renderables.append(self._build_emphasis_panel(self._build_story_compact_path_text()))
         renderables.append(Text(""))
-        renderables.append(self._build_section_heading("Source alignment"))
-        renderables.append(self._build_story_source_alignment_table())
-        renderables.append(Text(""))
-        renderables.append(self._build_section_block("Restricted in your role", self._build_story_restricted_text()))
-        renderables.append(Text(""))
-        renderables.append(self._build_section_block("Recommendation", Text("Assess whether the active session is likely related, then compare approval evidence before preparing any privileged response.", style=PALETTE["text_main"])))
+        renderables.append(self._build_section_block("Recommended next step", Text("Assess whether the live session is likely related before preparing any privileged response.", style=PALETTE["text_main"])))
         renderables.append(Text(""))
         renderables.append(Text("Investigate next", style=f"bold {PALETTE['orange_soft']}"))
         renderables.extend(self._build_story_followup_lines("story_findings"))
+        return renderables
+
+    def _build_story_supporting_evidence_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Supporting evidence", "Source states behind the current finding"))
+        renderables.append(Text(""))
+        renderables.append(self._build_story_source_alignment_table())
+        renderables.append(Text(""))
+        renderables.append(Text("Next", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_supporting_evidence"))
         return renderables
 
     def _build_story_session_relatedness_renderables(self) -> list[object]:
         renderables: list[object] = []
         renderables.append(self._build_story_header_text("Session relatedness", "Likely related, not confirmed"))
         renderables.append(Text(""))
-        renderables.append(self._build_story_state_line((("confidence: medium", "warn"), ("role-aware", "ok"), ("active investigation", "info"))))
+        renderables.append(self._build_story_state_line((("confidence: medium", "warn"),)))
         renderables.append(Text(""))
-        renderables.append(self._build_section_block("Supporting signals", self._build_bullet_text(("temporal overlap between svc-backup-ops activity and pra-2214", "the same reachable path still lands in aws-prod-admin", "production reads began shortly after the privileged session opened"))))
+        top_row = Table.grid(expand=True, padding=(0, 2))
+        top_row.add_column(ratio=1)
+        top_row.add_column(ratio=1)
+        top_row.add_row(
+            self._build_section_block(
+                "Supporting signals",
+                self._build_bullet_text(
+                    (
+                        "temporal overlap between svc-backup-ops and pra-2214",
+                        "the reachable path still lands in aws-prod-admin",
+                        "production reads started shortly after session open",
+                    )
+                ),
+            ),
+            self._build_section_block(
+                "Missing evidence",
+                self._build_bullet_text(
+                    (
+                        "no approval evidence is tied directly to the live session",
+                        "full privileged session contents are blocked in this role",
+                        "intent is still inferred rather than proven",
+                    )
+                ),
+            ),
+        )
+        confidence_column = Table.grid(expand=True, padding=(0, 1))
+        for _ in range(4):
+            confidence_column.add_column(ratio=1, min_width=22, no_wrap=True)
+        confidence_column.add_row(
+            self._build_story_session_metric_text("temporal overlap", 82, "high"),
+            self._build_story_session_metric_text("identity overlap", 79, "high"),
+            self._build_story_session_metric_text("intent certainty", 58, "medium"),
+            self._build_story_session_metric_text("attribution confidence", 61, "medium"),
+        )
+        sensitivity_column = Table.grid(expand=True, padding=(0, 1))
+        for _ in range(4):
+            sensitivity_column.add_column(ratio=1, min_width=22, no_wrap=True)
+        sensitivity_column.add_row(
+            self._build_story_session_metric_text("session risk", 84, "high"),
+            self._build_story_session_metric_text("target sensitivity", 95, "critical"),
+            self._build_story_session_metric_text("approval confidence", 31, "low"),
+            Text(""),
+        )
+        renderables.append(top_row)
         renderables.append(Text(""))
-        renderables.append(self._build_section_block("Missing evidence", self._build_bullet_text(("no confirmed approval evidence tied directly to the live session", "raw privileged session contents are blocked in this role", "intent is still inferred rather than proven"))))
+        renderables.append(Group(self._build_section_heading("Confidence"), confidence_column))
+        renderables.append(Text(""))
+        renderables.append(Group(self._build_section_heading("Sensitivity"), sensitivity_column))
         renderables.append(Text(""))
         renderables.append(self._build_section_heading("Timeline"))
-        renderables.append(self._build_emphasis_panel(self._build_story_timeline_text()))
+        renderables.append(self._build_story_session_timeline_text())
         renderables.append(Text(""))
-        renderables.append(self._build_section_block("Confidence meter", self._build_story_signal_bars_text((("temporal overlap", 82, "high"), ("identity overlap", 79, "high"), ("intent certainty", 58, "medium"), ("attribution confidence", 61, "medium")))))
-        renderables.append(Text(""))
-        renderables.append(self._build_section_block("Sensitivity", self._build_story_signal_bars_text((("session risk", 84, "high"), ("target sensitivity", 95, "critical"), ("approval confidence", 31, "low")))))
-        renderables.append(Text(""))
-        renderables.append(self._build_section_block("Best current read", Text("The privileged session is likely related to the same service-account path, but the evidence is still short of direct attribution. Treat it as medium confidence with escalation-ready evidence.", style=PALETTE["text_main"])))
+        renderables.append(self._build_section_block("Current read", Text("Pathfinder thinks the privileged session is likely related because the same path is reachable and the timing lines up, but approval evidence is still missing. Treat it as medium confidence, not confirmation.", style=PALETTE["text_main"])))
         renderables.append(Text(""))
         renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
         renderables.extend(self._build_story_followup_lines("story_session_relatedness"))
@@ -4705,7 +5217,7 @@ class PathfinderPrototypeApp(App[None]):
         renderables: list[object] = []
         renderables.append(self._build_story_header_text("Privilege path", "Service-account path into production admin"))
         renderables.append(Text(""))
-        renderables.append(self._build_story_state_line((("active investigation", "info"), ("approval required", "warn"))))
+        renderables.append(self._build_story_state_line((("approval required", "warn"),)))
         renderables.append(Text(""))
         renderables.append(self._build_section_heading("Focused path"))
         renderables.append(self._build_emphasis_panel(self._build_story_privilege_graph_text()))
@@ -4720,23 +5232,52 @@ class PathfinderPrototypeApp(App[None]):
 
     def _build_story_assets_renderables(self) -> list[object]:
         renderables: list[object] = []
-        renderables.append(self._build_story_header_text("Affected assets", "Using the active investigation context already in session memory"))
+        renderables.append(self._build_story_header_text("Affected assets", ""))
         renderables.append(Text(""))
-        renderables.append(self._build_story_state_line((("session memory active", "ok"), ("active investigation", "info"))))
+        renderables.append(Text("Using active context: svc-backup-ops | production | last 24h | triage + containment", style=PALETTE["text_main"]))
         renderables.append(Text(""))
-        renderables.append(self._build_story_memory_panel())
+        renderables.append(self._build_section_heading("Affected assets"))
+        renderables.append(self._build_story_assets_table())
         renderables.append(Text(""))
-        renderables.append(self._build_section_block("Asset grouping", self._build_story_asset_grouping_text()))
+        renderables.append(Text("Grouped by highest observed severity and overlap with the live session or reachable admin path.", style=PALETTE["text_muted"]))
         renderables.append(Text(""))
-        renderables.append(self._build_section_block("Severity bars", self._build_story_signal_bars_text((("critical", 10, "1"), ("high", 20, "2"), ("medium", 10, "1")))))
-        renderables.append(Text(""))
-        renderables.append(self._build_section_block("Why these are grouped this way", Text("Critical assets have direct session overlap. High assets sit on the same reachable path. Medium assets show contextual drift but no direct privileged overlap yet.", style=PALETTE["text_main"])))
-        renderables.append(Text(""))
-        renderables.append(self._build_section_block("Highest-priority review", Text("prod-sql-07 is the top review target because it already overlaps the live session and the reachable admin path.", style=PALETTE["text_main"])))
+        renderables.append(Text("Top review target: prod-sql-07, because it overlaps the live session and the reachable admin path.", style=PALETTE["text_main"]))
         renderables.append(Text(""))
         renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
         renderables.extend(self._build_story_followup_lines("story_assets"))
         return renderables
+
+    def _build_story_assets_table(self) -> Table:
+        table = Table(
+            box=TABLE_BOX,
+            expand=True,
+            show_lines=True,
+            border_style=PALETTE["line"],
+            header_style=f"bold {PALETTE['orange_soft']}",
+            padding=(0, 1),
+            pad_edge=False,
+        )
+        table.add_column("Severity", no_wrap=True, min_width=10)
+        table.add_column("Asset", min_width=16)
+        table.add_column("Why it matters", min_width=24)
+        rows = (
+            ("Critical", "prod-sql-07", "session overlap"),
+            ("High", "prod-app-12", "path overlap"),
+            ("High", "prod-app-14", "path overlap"),
+            ("Medium", "prod-backup-03", "behavior drift"),
+        )
+        for severity, asset, reason in rows:
+            severity_style = {
+                "Critical": self._status_style("risk"),
+                "High": f"bold {PALETTE['orange_soft']}",
+                "Medium": self._status_style("info"),
+            }[severity]
+            table.add_row(
+                Text(severity, style=severity_style),
+                Text(asset, style=f"bold {PALETTE['text_main']}"),
+                Text(reason, style=PALETTE["text_main"]),
+            )
+        return table
 
     def _build_story_asset_detail_renderables(self) -> list[object]:
         context = self._story_current_context()
@@ -4764,7 +5305,7 @@ class PathfinderPrototypeApp(App[None]):
         renderables: list[object] = []
         renderables.append(self._build_story_header_text("Top asset detail", "Focused review target inside the active investigation"))
         renderables.append(Text(""))
-        renderables.append(self._build_story_state_line((("active investigation", "info"), ("critical asset", "risk"), ("session memory active", "ok"))))
+        renderables.append(self._build_story_state_line((("critical asset", "risk"),)))
         renderables.append(Text(""))
         renderables.append(self._build_section_heading("Asset detail"))
         renderables.append(table)
@@ -4781,21 +5322,20 @@ class PathfinderPrototypeApp(App[None]):
         renderables: list[object] = []
         renderables.append(self._build_story_header_text("Containment options", "BeyondTrust-native access moves, not downstream host isolation"))
         renderables.append(Text(""))
-        renderables.append(self._build_story_state_line((("active investigation", "info"), ("approval required", "warn"), ("role-aware", "ok"))))
+        renderables.append(self._build_story_state_line((("approval required", "warn"),)))
         renderables.append(Text(""))
-        renderables.append(self._build_section_block("Current posture", Text("Current risk is 91. pra-2214 is still active, the reachable admin path remains intact, and approval evidence is still incomplete.", style=PALETTE["text_main"])))
+        renderables.append(self._build_containment_status_text())
         renderables.append(Text(""))
         renderables.append(self._build_section_heading("Containment options"))
         renderables.append(self._build_story_containment_options_table())
         renderables.append(Text(""))
-        renderables.append(self._build_section_block("Risk reduction view", self._build_story_signal_bars_text((("current risk", 91, "91"), ("revoke session", 63, "63"), ("suspend path", 41, "41"), ("do both", 19, "19")))))
+        renderables.append(self._build_section_heading("Risk reduction"))
+        renderables.append(self._build_containment_summary_table())
+        renderables.append(self._build_containment_decision_cues_text())
         renderables.append(Text(""))
-        renderables.append(self._build_section_heading("Decision cues"))
-        renderables.append(self._build_story_decision_cues_table())
+        renderables.append(self._build_containment_recommended_section())
         renderables.append(Text(""))
-        renderables.append(self._build_section_block("Recommended response", Text("Prepare the combined response packet. It delivers the strongest reduction while keeping the analyst inside role boundaries and leaving the reviewer in control of the privileged change.", style=PALETTE["text_main"])))
-        renderables.append(Text(""))
-        renderables.append(self._build_section_block("Boundary check", Text("This role can recommend and prepare reviewer-facing actions. It cannot finalize privileged session termination or reachable-path suspension without approval.", style=PALETTE["text_main"])))
+        renderables.append(self._build_section_block("Boundary", Text("You can recommend and prepare these changes, but approval is required before session termination or path suspension.", style=PALETTE["text_muted"])))
         renderables.append(Text(""))
         renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
         renderables.extend(self._build_story_followup_lines("story_containment"))
@@ -4873,6 +5413,288 @@ class PathfinderPrototypeApp(App[None]):
         renderables.extend(self._build_story_followup_lines("story_export"))
         return renderables
 
+    def _build_demo_activity_heatmap_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Activity heat map", "Privileged activity concentration across core BeyondTrust signals"))
+        renderables.append(Text(""))
+        renderables.append(
+            Text(
+                "Privileged activity is clustering around policy and connector signals midweek, with Thursday showing the strongest policy spike. "
+                "That pattern suggests approval or entitlement drift deserves closer review before it spreads into active session behavior.",
+                style=PALETTE["text_main"],
+            )
+        )
+        renderables.append(Text(""))
+        renderables.append(self._build_demo_activity_heatmap_table())
+        renderables.append(Text(""))
+        renderables.append(Text("Suggested next steps", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_demo_activity_heatmap"))
+        return renderables
+
+    def _build_demo_activity_heatmap_table(self) -> Table:
+        table = Table(
+            title="Weekly signal heat map",
+            box=TABLE_BOX,
+            expand=True,
+            show_lines=True,
+            border_style=PALETTE["line"],
+            header_style=f"bold {PALETTE['orange_soft']}",
+            padding=(0, 1),
+            pad_edge=False,
+        )
+        table.add_column("Signal", style=PALETTE["text_main"], min_width=12)
+        for column in ("Mon", "Tue", "Wed", "Thu", "Fri"):
+            table.add_column(column, justify="center", min_width=7)
+
+        for signal, values in DEMO_ACTIVITY_HEATMAP_VALUES:
+            cells: list[object] = [Text(signal, style=f"bold {PALETTE['text_main']}")]
+            cells.extend(self._heatmap_cell(value) for value in values)
+            table.add_row(*cells)
+        return table
+
+    def _build_demo_queue_breakdown_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Privileged access review queue", "Today split by correlated risk, watch items, and stale approvals"))
+        renderables.append(Text(""))
+        renderables.append(
+            Text(
+                "Nearly half of today's review queue is correlated risk, with supporting evidence across multiple BeyondTrust signals. "
+                "Watch and stale items still matter, but the correlated segment should be reviewed first because it is more likely to produce immediate action.",
+                style=PALETTE["text_main"],
+            )
+        )
+        renderables.append(Text(""))
+        renderables.append(self._build_section_heading("Queue composition"))
+        renderables.append(self._build_demo_queue_pie_text())
+        renderables.append(Text(""))
+        renderables.append(self._build_demo_queue_legend_table())
+        renderables.append(Text(""))
+        renderables.append(Text("Suggested next steps", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_demo_queue_breakdown"))
+        return renderables
+
+    def _build_demo_queue_pie_text(self) -> Text:
+        text = Text()
+        text.append_text(self._build_pie_chart_text(DEMO_QUEUE_BREAKDOWN_VALUES, radius=4, inner_ratio=0.42))
+        text.append("\n", style=PALETTE["text_main"])
+        text.append("correlated 46% | watch 31% | stale 23%", style=PALETTE["text_muted"])
+        return text
+
+    def _build_demo_queue_legend_table(self) -> Table:
+        table = Table(
+            title="Legend",
+            box=TABLE_BOX,
+            expand=True,
+            show_lines=True,
+            border_style=PALETTE["line"],
+            header_style=f"bold {PALETTE['orange_soft']}",
+            padding=(0, 1),
+            pad_edge=False,
+        )
+        table.add_column("Segment", min_width=14)
+        table.add_column("Share", justify="right", min_width=8)
+        table.add_column("Meaning", min_width=44)
+        meaning_by_label = {
+            "correlated": "evidence aligns across privileged session, identity, or approval signals",
+            "watch": "lower urgency items that still deserve sampling after high-value triage",
+            "stale": "older approvals or queue residue that may need cleanup or revalidation",
+        }
+        for label, value, tone in DEMO_QUEUE_BREAKDOWN_VALUES:
+            table.add_row(
+                Text(label, style=f"bold {self._tone_text_color(tone)}"),
+                Text(f"{value}%", style=PALETTE["text_main"]),
+                Text(meaning_by_label[label], style=PALETTE["text_muted"]),
+            )
+        return table
+
+    def _build_demo_privilege_graph_renderables(self) -> list[object]:
+        renderables: list[object] = []
+        renderables.append(self._build_story_header_text("Reachable privilege path: svc-backup-ops", "Production admin exposure with live session and approval mismatch"))
+        renderables.append(Text(""))
+        renderables.append(
+            Text(
+                "Pathfinder mapped svc-backup-ops through group inheritance into aws-prod-admin, with pra-2214 still active on the path. "
+                "The route is reachable and production-scoped, but the approval trail does not cleanly match the live privileged session.",
+                style=PALETTE["text_main"],
+            )
+        )
+        renderables.append(Text(""))
+        renderables.append(self._build_section_heading("Reachable privilege graph"))
+        renderables.append(self._build_emphasis_panel(self._build_demo_privilege_graph_text()))
+        renderables.append(Text(""))
+        renderables.append(self._build_demo_privilege_risk_table())
+        renderables.append(Text(""))
+        renderables.append(Text("Suggested next steps", style=f"bold {PALETTE['orange_soft']}"))
+        renderables.extend(self._build_story_followup_lines("story_demo_privilege_graph"))
+        return renderables
+
+    def _build_demo_privilege_graph_text(self) -> Text:
+        text = Text()
+        self._append_privilege_path_line(
+            text,
+            "",
+            "SVC",
+            "accent",
+            "svc-backup-ops",
+            f"bold {PALETTE['text_main']}",
+            suffix="RISK 91",
+            suffix_style=self._status_style("risk"),
+        )
+        self._append_privilege_path_connector(text, "  ")
+        self._append_privilege_path_line(
+            text,
+            "  +-- ",
+            "IDP",
+            "info",
+            "Entra workload identity -> AWS IAM Identity Center",
+            PALETTE["text_main"],
+        )
+        self._append_privilege_path_line(
+            text,
+            "  +-- ",
+            "GRP",
+            "accent",
+            "grp-cloud-admins",
+            f"bold {PALETTE['purple']}",
+            suffix="LIVE EDGE",
+            suffix_style=self._status_style("warn"),
+        )
+        self._append_privilege_path_line(
+            text,
+            "  |   +-- ",
+            "GRP",
+            "violet",
+            "grp-prod-breakglass",
+            f"bold {PALETTE['violet']}",
+        )
+        self._append_privilege_path_line(
+            text,
+            "  |   |   +-- ",
+            "ROLE",
+            "risk",
+            "aws-prod-admin",
+            self._status_style("risk"),
+            suffix="REACHABLE",
+            suffix_style=self._status_style("risk"),
+        )
+        self._append_privilege_path_line(
+            text,
+            "  |   |   |   +-- ",
+            "PERM",
+            "info",
+            "iam:PassRole -> prod-backup-restore",
+            PALETTE["text_main"],
+        )
+        self._append_privilege_path_line(
+            text,
+            "  |   |   |   +-- ",
+            "PERM",
+            "info",
+            "ec2:ModifySnapshotAttribute",
+            PALETTE["text_main"],
+        )
+        self._append_privilege_path_line(
+            text,
+            "  |   |   |   +-- ",
+            "SCOPE",
+            "warn",
+            "production backup and database tier",
+            f"bold {PALETTE['orange_pale']}",
+        )
+        self._append_privilege_path_line(
+            text,
+            "  +-- ",
+            "PRA",
+            "teal",
+            "pra-2214 -> prod-bastion-07",
+            f"bold {PALETTE['teal']}",
+            suffix="ACTIVE",
+            suffix_style=self._status_style("warn"),
+        )
+        self._append_privilege_path_line(
+            text,
+            "  |   +-- ",
+            "HOST",
+            "risk",
+            "prod-sql-07",
+            self._status_style("risk"),
+            suffix="CONFIG READ",
+            suffix_style=self._status_style("warn"),
+        )
+        self._append_privilege_path_line(
+            text,
+            "  |   +-- ",
+            "HOST",
+            "accent",
+            "prod-app-12",
+            PALETTE["text_main"],
+        )
+        self._append_privilege_path_line(
+            text,
+            "  +-- ",
+            "SAFE",
+            "warn",
+            "Password Safe checkout trail",
+            f"bold {PALETTE['orange_pale']}",
+            suffix="NO PROOF",
+            suffix_style=self._status_style("warn"),
+        )
+        self._append_privilege_path_line(
+            text,
+            "  |   +-- ",
+            "APPR",
+            "warn",
+            "CHG-5108 backup maintenance",
+            PALETTE["text_main"],
+            suffix="MISMATCH",
+            suffix_style=self._status_style("warn"),
+        )
+        self._append_privilege_path_line(
+            text,
+            "  |   +-- ",
+            "ENT",
+            "accent",
+            "production request does not cleanly match pra-2214",
+            PALETTE["text_main"],
+        )
+        self._append_privilege_path_line(
+            text,
+            "  +-- ",
+            "BREAK",
+            "warn",
+            "suspend grp-cloud-admins -> aws-prod-admin after approval",
+            f"bold {PALETTE['text_main']}",
+        )
+        return text
+
+    def _build_demo_privilege_risk_table(self) -> Table:
+        table = Table(
+            title="Risk summary",
+            box=TABLE_BOX,
+            expand=True,
+            show_lines=True,
+            border_style=PALETTE["line"],
+            header_style=f"bold {PALETTE['orange_soft']}",
+            padding=(0, 1),
+            pad_edge=False,
+        )
+        table.add_column("Signal", min_width=22)
+        table.add_column("State", min_width=24)
+        table.add_column("Decision cue", min_width=42)
+        rows = (
+            ("risk", "91", "treat as high-priority until the approval mismatch is resolved", "risk"),
+            ("session", "pra-2214 active", "live privileged activity may still be touching production", "risk"),
+            ("approval", "mismatch", "do not assume the session is approved without reviewer evidence", "warn"),
+            ("scope", "production", "containment recommendations need approval before execution", "info"),
+        )
+        for signal, state, cue, tone in rows:
+            table.add_row(
+                Text(signal, style=PALETTE["text_muted"]),
+                Text(state, style=f"bold {self._tone_text_color(tone)}"),
+                Text(cue, style=PALETTE["text_main"]),
+            )
+        return table
+
     def _build_story_menu_lines(self) -> list[Text]:
         lines: list[Text] = []
         for index, action in enumerate(STORY_MENU_ACTIONS, start=1):
@@ -4922,6 +5744,22 @@ class PathfinderPrototypeApp(App[None]):
         return renderables
 
     def _build_story_mode_renderables(self, scene_key: str) -> list[object]:
+        if scene_key == "story_mode_portfolio_cover":
+            return [
+                *self._build_portfolio_cover_renderables(),
+                Text(""),
+                Text("Return", style=f"bold {PALETTE['orange_soft']}"),
+                *self._build_story_followup_lines(scene_key),
+            ]
+
+        if scene_key == "story_mode_temp_sunset_scene":
+            return [
+                *self._build_temp_sunset_scene_renderables(),
+                Text(""),
+                Text("Return", style=f"bold {PALETTE['orange_soft']}"),
+                *self._build_story_followup_lines(scene_key),
+            ]
+
         content: dict[str, tuple[str, ...]] = {
             "story_mode_probabilistic": (
                 "[story mode] [design lens]",
@@ -5890,15 +6728,11 @@ class PathfinderPrototypeApp(App[None]):
         renderables.append(Text(""))
         renderables.append(self._build_containment_status_text())
         renderables.append(Text(""))
-        renderables.append(self._build_section_heading("Containment options"))
-        renderables.append(self._build_containment_matrix_table())
+        renderables.extend(self._build_containment_body())
         renderables.append(Text(""))
-        renderables.append(self._build_section_heading("Decision cues"))
-        renderables.append(self._build_containment_assessment_table())
+        renderables.append(self._build_containment_recommended_section())
         renderables.append(Text(""))
-        renderables.append(
-            self._build_section_block("Recommended response", self._build_containment_recommendation_text())
-        )
+        renderables.append(self._build_section_block("Boundary", Text("You can recommend and prepare these changes, but approval is required before session termination or path suspension.", style=PALETTE["text_muted"])))
         renderables.append(Text(""))
         renderables.append(Text("Decide next", style=f"bold {PALETTE['orange_soft']}"))
         renderables.extend(self._build_containment_followup_lines())
@@ -5906,28 +6740,24 @@ class PathfinderPrototypeApp(App[None]):
 
     def _build_containment_header_text(self) -> Text:
         text = Text()
-        text.append("Containment simulation", style=f"bold {PALETTE['orange_soft']}")
-        text.append("\n", style=PALETTE["text_main"])
-        text.append("amy.miller", style=f"bold {PALETTE['text_main']}")
-        text.append(" | ", style=PALETTE["line"])
-        text.append("aws-prod-admin", style=f"bold {PALETTE['orange_pale']}")
-        text.append(" | ", style=PALETTE["line"])
-        text.append("response options compared", style=PALETTE["text_muted"])
+        text.append("Containment options", style=f"bold {PALETTE['orange_soft']}")
         return text
+
+    def _build_containment_body(self) -> list[object]:
+        return [
+            self._build_section_heading("Containment options"),
+            self._build_containment_matrix_table(),
+            Text(""),
+            self._build_section_heading("Risk reduction"),
+            self._build_containment_summary_table(),
+            self._build_containment_decision_cues_text(),
+        ]
 
     def _build_containment_status_text(self) -> Text:
         text = Text()
-        text.append("[", style=PALETTE["line"])
-        text.append("critical", style=self._status_style("risk"))
-        text.append("]", style=PALETTE["line"])
-        text.append("   ", style=PALETTE["text_main"])
-        text.append("current risk 92", style=self._status_style("risk"))
-        text.append("   ", style=PALETTE["text_main"])
-        text.append("live session active", style=self._status_style("risk"))
-        text.append("   ", style=PALETTE["text_main"])
-        text.append("admin path reachable", style=f"bold {PALETTE['orange_pale']}")
-        text.append("   ", style=PALETTE["text_main"])
-        text.append("decision required", style=PALETTE["text_main"])
+        text.append("risk ", style=PALETTE["text_muted"])
+        text.append("91", style=self._status_style("risk"))
+        text.append(" | pra-2214 active | reachable admin path intact | approval evidence incomplete", style=PALETTE["text_main"])
         return text
 
     def _build_containment_matrix_table(self) -> Table:
@@ -5940,51 +6770,108 @@ class PathfinderPrototypeApp(App[None]):
             padding=(0, 1),
             pad_edge=False,
         )
-        table.add_column("Opt", no_wrap=True, min_width=5)
-        table.add_column("Action", min_width=23)
-        table.add_column("Risk", no_wrap=True, min_width=9)
-        table.add_column("Session", no_wrap=True, min_width=11)
-        table.add_column("Path", no_wrap=True, min_width=8)
-        table.add_column("Impact", no_wrap=True, min_width=10)
-        table.add_column("Review", no_wrap=True, min_width=8)
+        table.add_column("Action", min_width=20)
+        table.add_column("Risk", no_wrap=True, min_width=10)
+        table.add_column("Session", min_width=12)
+        table.add_column("Path", min_width=10)
+        table.add_column("Impact", min_width=10)
+        table.add_column("Approval", no_wrap=True, min_width=10)
 
         rows = (
-            ("A", "revoke session only", "92 -> 61", "closed", "remains", "medium", "YES"),
-            ("B", "remove admin link only", "92 -> 38", "may persist", "broken", "low-med", "YES"),
-            ("C", "do both", "92 -> 18", "closed", "broken", "med-high", "YES"),
+            ("revoke session", "91 -> 63", "closed", "remains", "medium", "yes"),
+            ("suspend path", "91 -> 41", "may persist", "broken", "low-med", "yes"),
+            ("do both", "91 -> 18", "closed", "broken", "med-hi", "yes"),
+            ("review only", "91 -> 91", "unchanged", "unchanged", "low", "no"),
         )
-        for option, action, risk, session, path, impact, review in rows:
-            action_style = f"bold {PALETTE['text_main']}" if option == "C" else PALETTE["text_main"]
+        for action, risk, session, path, impact, approval in rows:
+            action_style = f"bold {PALETTE['text_main']}" if action == "do both" else PALETTE["text_main"]
             risk_style = {
-                "A": self._status_style("risk"),
-                "B": self._status_style("warn"),
-                "C": self._status_style("ok"),
-            }[option]
+                "91 -> 63": self._status_style("risk"),
+                "91 -> 41": self._status_style("warn"),
+                "91 -> 18": self._status_style("ok"),
+                "91 -> 91": PALETTE["text_muted"],
+            }[risk]
             impact_style = {
                 "medium": PALETTE["orange_pale"],
                 "low-med": PALETTE["yellow"],
-                "med-high": self._status_style("warn"),
+                "med-hi": self._status_style("warn"),
+                "low": PALETTE["text_muted"],
             }[impact]
             table.add_row(
-                self._build_option_badge(option),
                 Text(action, style=action_style),
                 Text(risk, style=risk_style),
                 Text(session, style=PALETTE["text_main"]),
                 Text(path, style=self._status_style("risk") if path == "remains" else self._status_style("ok")),
                 Text(impact, style=impact_style),
-                self._build_badge(review, "warn"),
-                style=f"on {PALETTE['bg_soft']}" if option == "C" else "",
+                self._build_badge(approval, "warn" if approval == "yes" else "ok"),
+                style=f"on {PALETTE['bg_soft']}" if action == "do both" else "",
             )
         return table
 
     def _build_containment_recommendation_text(self) -> Text:
         text = Text()
         text.append("Do both now. ", style=PALETTE["text_main"])
-        text.append(
-            "This is the fastest total reduction for a critical case with a live session, a reachable admin path, and no confirmed business approval.\n",
-            style=f"bold {PALETTE['text_main']}",
+        text.append("It gives the strongest reduction while keeping the analyst inside role boundaries.", style=f"bold {PALETTE['text_main']}")
+        return text
+
+    def _build_containment_recommended_section(self) -> Text:
+        return self._build_section_block(
+            "Recommended",
+            Text(
+                "Prepare the combined response packet. It delivers the strongest reduction while keeping the analyst inside role boundaries and leaving the privileged change to an approver.",
+                style=PALETTE["text_main"],
+            ),
         )
-        text.append("Incident review should be staged in parallel because sensitive operations were already observed.", style=PALETTE["text_muted"])
+
+    def _build_containment_summary_table(self) -> Table:
+        table = Table(
+            box=TABLE_BOX,
+            expand=True,
+            show_lines=True,
+            border_style=PALETTE["line"],
+            header_style=f"bold {PALETTE['orange_soft']}",
+            padding=(0, 1),
+            pad_edge=False,
+        )
+        table.add_column("Option", min_width=16)
+        table.add_column("Signal", min_width=28)
+
+        rows = (
+            ("revoke session", 55, "med"),
+            ("suspend path", 80, "high"),
+            ("do both", 100, "max"),
+            ("review only", 10, "none"),
+        )
+        def signal_cell(score: int, label: str) -> Text:
+            cell = Text()
+            cell.append_text(self._bar(score, width=10))
+            cell.append(" ", style=PALETTE["text_main"])
+            cell.append(label, style=f"bold {PALETTE['text_main']}" if label in {"high", "max"} else PALETTE["text_main"])
+            return cell
+
+        for option, score, label in rows:
+            table.add_row(
+                Text(option, style=f"bold {PALETTE['text_main']}" if option == "do both" else PALETTE["text_main"]),
+                signal_cell(score, label),
+                style=f"on {PALETTE['bg_soft']}" if option == "do both" else "",
+            )
+        return table
+
+    def _build_containment_decision_cues_text(self) -> Text:
+        text = Text()
+        rows = (
+            ("fastest", "review only"),
+            ("most durable", "suspend path only"),
+            ("strongest reduction", "do both after approval"),
+            ("lowest disruption", "review only"),
+        )
+        for index, (label, value) in enumerate(rows):
+            if index == 0:
+                text.append("cues: ", style=PALETTE["text_muted"])
+            text.append(f"{label}: ", style=PALETTE["text_muted"])
+            text.append(value, style=f"bold {PALETTE['orange_pale']}" if "do both" in value or "suspend" in value else PALETTE["text_main"])
+            if index < len(rows) - 1:
+                text.append(" | ", style=PALETTE["line"])
         return text
 
     def _build_containment_followup_lines(self) -> list[Text]:
@@ -6563,25 +7450,56 @@ class PathfinderPrototypeApp(App[None]):
             table.add_row(signal, f"{value}%", self._bar(value, width=16))
         return table
 
-    def _build_response(self, prompt: str, module: ModuleSpec) -> tuple[str, bool, bool]:
+    def _build_response_visualization(self, visualization_kind: str, module: ModuleSpec) -> object:
+        if visualization_kind == "heatmap":
+            return self._build_module_heatmap_table(module)
+        if visualization_kind == "pie":
+            return self._build_module_risk_mix_panel(module)
+        return self._build_module_metric_chart_table(module)
+
+    def _response_visualization_kind(self, prompt: str, *, wants_agent_status: bool) -> str | None:
+        if wants_agent_status:
+            return None
+
+        lower_prompt = prompt.lower()
+        if "table" in lower_prompt:
+            return None
+        if any(phrase in lower_prompt for phrase in HEATMAP_VISUALIZATION_PHRASES):
+            return "heatmap"
+        if any(phrase in lower_prompt for phrase in PIE_VISUALIZATION_PHRASES):
+            return "pie"
+        if any(phrase in lower_prompt for phrase in BAR_VISUALIZATION_PHRASES):
+            return "bar"
+        return None
+
+    def _build_response(self, prompt: str, module: ModuleSpec) -> tuple[str, bool, bool, str | None]:
         lower_prompt = prompt.lower()
         wants_agent_status = self._matches_agent_status_request(prompt)
         show_table = wants_agent_status or any(token in lower_prompt for token in TABLE_TOKENS)
-        show_metrics = (not wants_agent_status) and any(token in lower_prompt for token in METRIC_TOKENS)
+        visualization_kind = self._response_visualization_kind(prompt, wants_agent_status=wants_agent_status)
+        show_metrics = (
+            (not wants_agent_status)
+            and visualization_kind is None
+            and any(token in lower_prompt for token in METRIC_TOKENS)
+        )
 
         if wants_agent_status:
             summary = (
                 "Agent status loaded across BeyondTrust capabilities and connected tools. "
                 "Microsoft Entra ID is the only connector with a token nearing expiry."
             )
-            return summary, show_table, show_metrics
+            return summary, show_table, show_metrics, visualization_kind
 
         summary = f"{module.label}: {module.status} Priority focus: {module.insights[0]}"
-        return summary, show_table, show_metrics
+        return summary, show_table, show_metrics, visualization_kind
 
-    async def _animate_processing(self, cycles: int = 14, delay: float = 0.05) -> None:
+    async def _animate_processing(self, cycles: int = 28, delay: float = 0.08) -> None:
         for _ in range(cycles):
             await asyncio.sleep(delay)
+            if self.processing:
+                self._render_current_module()
+            else:
+                self._refresh_chrome()
 
     def _separator(self) -> str:
         width = self.query_one("#main-log", RichLog).size.width or self.size.width or 96
@@ -6594,7 +7512,7 @@ class PathfinderPrototypeApp(App[None]):
         return ("- " * ((usable_width + 1) // 2))[:usable_width]
 
     def _processing_spinner(self) -> str:
-        return "|/-\\"[self.chrome_tick % 4]
+        return PROCESSING_SPINNER_FRAMES[self.chrome_tick % len(PROCESSING_SPINNER_FRAMES)]
 
     def _tick_ui(self) -> None:
         if self.processing:
@@ -6619,17 +7537,10 @@ class PathfinderPrototypeApp(App[None]):
         }.get(level, PALETTE["text_main"])
 
     def _build_footer_hint(self) -> Text:
-        scene_hint = self._scene_footer_hint()
-        if scene_hint is not None:
-            return scene_hint
-        message = FOOTER_HELP_MESSAGES[(self.chrome_tick // 12) % len(FOOTER_HELP_MESSAGES)]
-        spinner = FOOTER_SPINNER_FRAMES[self.chrome_tick % len(FOOTER_SPINNER_FRAMES)]
         text = Text()
+        text.append("Use ", style=PALETTE["text_muted"])
         text.append("/help", style=f"bold {PALETTE['orange_primary']}")
-        text.append("  ", style=PALETTE["text_main"])
-        text.append(spinner, style=f"bold {PALETTE['orange_primary']}")
-        text.append(" ", style=PALETTE["text_main"])
-        text.append(message, style=PALETTE["text_muted"])
+        text.append(" when you have questions", style=PALETTE["text_muted"])
         return text
 
     def _estimated_token_usage(self) -> int:
@@ -6686,7 +7597,7 @@ class PathfinderPrototypeApp(App[None]):
         self.last_update_at = time.perf_counter()
 
     def _home_selection_count(self) -> int:
-        return len(ATTENTION_ITEMS) + len(HOME_ACTIONS)
+        return len(ATTENTION_ITEMS)
 
     def _selected_attention_index(self) -> int | None:
         if not self.home_navigation_active or self.home_selection_index >= len(ATTENTION_ITEMS):
@@ -6694,9 +7605,7 @@ class PathfinderPrototypeApp(App[None]):
         return self.home_selection_index
 
     def _selected_action_index(self) -> int | None:
-        if not self.home_navigation_active or self.home_selection_index < len(ATTENTION_ITEMS):
-            return None
-        return self.home_selection_index - len(ATTENTION_ITEMS)
+        return None
 
     def _is_attention_selected(self, index: int) -> bool:
         return self._selected_attention_index() == index
@@ -6723,7 +7632,7 @@ class PathfinderPrototypeApp(App[None]):
             self.query_one("#top-meta", Static).update(self._build_top_meta())
 
             typing = Text()
-            spinner = self._processing_spinner() if self.processing else (">" if self.chrome_tick % 2 else "|")
+            spinner = self._processing_spinner()
             typing.append(spinner, style=f"bold {PALETTE['orange_primary']}")
             if self.processing:
                 typing.append(" ", style=PALETTE["text_main"])
@@ -6806,7 +7715,13 @@ class PathfinderPrototypeApp(App[None]):
         self._render_current_module()
 
         try:
-            await self._animate_processing(cycles=12, delay=0.06)
+            if processing_message == "Resolving scope...":
+                await self._animate_processing(cycles=12, delay=0.08)
+                self.processing_message = "Planning next step..."
+                self._render_current_module()
+                await self._animate_processing(cycles=12, delay=0.08)
+            else:
+                await self._animate_processing(cycles=24, delay=0.08)
             callback()
         finally:
             self.processing = False
@@ -6826,6 +7741,26 @@ class PathfinderPrototypeApp(App[None]):
             return "Preparing portfolio cover..."
         if action.key == "temp_sunset_scene":
             return "Loading temp splash scene..."
+        return "Thinking..."
+
+    def _utility_processing_message(self, command: str) -> str:
+        command_lower = command.strip().lower()
+        if command_lower == "/reset":
+            return "Resetting the demo workspace..."
+        if command_lower == "/help":
+            return "Loading command reference..."
+        if command_lower == "/actions":
+            return "Refreshing actionable items..."
+        if command_lower == "/permission":
+            return "Checking SOC Analyst II permissions..."
+        if command_lower == "/story":
+            return "Opening story scenes..."
+        if command_lower.startswith("/module") or command_lower.startswith("/app"):
+            return "Opening app navigation..."
+        if command_lower.startswith("/agent"):
+            return "Reviewing agent roster..."
+        if command_lower == "/clear":
+            return "Clearing conversation history..."
         return "Thinking..."
 
     def _investigation_action_processing_message(self, action: InvestigationAction) -> str:
@@ -6849,9 +7784,9 @@ class PathfinderPrototypeApp(App[None]):
                 return "Returning to story menu..."
             return "Opening story poster..."
         if action.key == "story_scope_default_recommend":
-            return "Resolving investigation scope..."
+            return "Resolving scope..."
         if action.key == "story_scope_default_triage":
-            return "Resolving investigation scope..."
+            return "Resolving scope..."
         if action.key == "story_customize_scope":
             return "Preparing scope customization..."
         if action.key == "story_show_role_limits":
@@ -6884,6 +7819,10 @@ class PathfinderPrototypeApp(App[None]):
             return "Reviewing staged approval..."
         if action.key in {"story_return_home", "story_return_home_keep_memory"}:
             return "Returning home..."
+        if action.key == "story_demo_open_approval_backlog":
+            return "Opening approval backlog..."
+        if action.key.startswith("story_demo_"):
+            return "Opening suggested follow-up..."
         if action.key.startswith("story_return_"):
             return "Returning to the previous story step..."
         if action.key.startswith("select_graph:"):
@@ -7261,8 +8200,10 @@ class PathfinderPrototypeApp(App[None]):
                 current_module.key,
                 ConversationEntry(
                     role="assistant",
-                    text=self._build_attention_response(attention).plain,
+                    text=f"{attention.subject} details",
                     source_prompt=attention.subject,
+                    kind="attention_detail",
+                    context_key=attention.subject,
                 ),
             )
         self._mark_updated()
@@ -7316,9 +8257,13 @@ class PathfinderPrototypeApp(App[None]):
         text.append(f"[{attention.severity}] ", style=self._status_style(attention.emphasis_level))
         text.append(attention.subject, style=f"bold {PALETTE['text_main']}")
         text.append("\n", style=PALETTE["text_main"])
-        text.append(attention.summary, style=PALETTE["text_main"])
+        text.append_text(self._build_attention_summary_text(attention))
         text.append("\n\nRecommended actions: ", style=PALETTE["text_muted"])
-        text.append(attention.detail, style=f"bold {PALETTE['text_main']}")
+        if attention.subject == "svc-backup-ops" and attention.detail.startswith("Start the investigation"):
+            text.append("Start the investigation", style=f"bold {PALETTE['orange_primary']}")
+            text.append(attention.detail.removeprefix("Start the investigation"), style=f"bold {PALETTE['text_main']}")
+        else:
+            text.append(attention.detail, style=f"bold {PALETTE['text_main']}")
         return text
 
     def _build_identity_graph_renderables(self) -> list[object]:

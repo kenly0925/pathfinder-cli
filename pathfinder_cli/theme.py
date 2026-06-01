@@ -115,8 +115,8 @@ def pipe_bar(value: int, width: int = 10) -> Text:
     for index in range(width):
         if index < filled:
             color = gradient_color(index / max(1, filled - 1))
-            text.append("|", style=f"bold {color}")
+            text.append("▮", style=f"bold {color}")
         else:
-            text.append("|", style=PALETTE["line"])
+            text.append("▯", style=PALETTE["line"])
 
     return text
